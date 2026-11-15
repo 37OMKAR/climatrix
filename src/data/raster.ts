@@ -13,11 +13,14 @@ type TagRef = { type: number; count: number; offset: number; inline?: number[] }
 
 const TYPE_SIZE: Record<number, number> = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8, 16: 8, 17: 8, 18: 8 };
 
-export async function rangeBytes(url: string, start: number, end: number, signal?: AbortSignal): Promise<Uint8Array> {
+export async function rangeBytes(url: string, start: number, end: number, signal?: AbortSignal, timeoutMs = 15000): Promise<Uint8Array> {
   let last: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), timeoutMs);
+    signal?.addEventListener('abort', () => ctl.abort(), { once: true });
     try {
-      const r = await fetch(url, { headers: { Range: `bytes=${start}-${end}` }, signal });
+      const r = await fetch(url, { headers: { Range: `bytes=${start}-${end}` }, signal: ctl.signal });
       if (r.status !== 206 && r.status !== 200) throw new Error(`HTTP ${r.status}`);
       const b = new Uint8Array(await r.arrayBuffer());
       if (r.status === 200) {
@@ -28,7 +31,9 @@ export async function rangeBytes(url: string, start: number, end: number, signal
     } catch (e) {
       last = e;
       if (signal?.aborted) break;
-      await new Promise((res) => setTimeout(res, 600 * (attempt + 1)));
+      await new Promise((res) => setTimeout(res, 400 * (attempt + 1)));
+    } finally {
+      clearTimeout(t);
     }
   }
   throw last instanceof Error ? last : new Error(String(last));

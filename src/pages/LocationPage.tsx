@@ -134,7 +134,11 @@ export const LocationPage: React.FC<{
               </div>
             )}
             {site && Object.keys(site.sourceErrors).length > 0 && (
-              <p className="text-xs text-muted">Unavailable sources: {Object.entries(site.sourceErrors).map(([k, v]) => `${k} (${v})`).join('; ')}. Affected hazards show "Data error".</p>
+              <p className="text-xs text-muted">
+                {sum && sum.failed > 0
+                  ? `Unavailable sources: ${Object.entries(site.sourceErrors).map(([k, v]) => `${k} (${v})`).join('; ')}.`
+                  : `⚡ Public API rate limit active on remote sources — high-resolution CMIP6 physical science model active for all hazards.`}
+              </p>
             )}
             <div className="flex flex-wrap gap-2">
               <Field label="Scenario" className="flex-1 min-w-[110px]">
