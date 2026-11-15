@@ -57,6 +57,36 @@ export const MethodologyPage: React.FC<{ apiKey: string; onApiKey: (k: string) =
           <Button kind="primary" onClick={() => { const r = Number(rate); if (r > 0) onFx({ usdInr: r, asOf }); }}>Save rate</Button>
         </div>
       </Card>
+      <Card title="UNEP FI & Munich Re Banking Framework (May 2024)">
+        <div className="flex flex-col gap-2.5 text-sm leading-relaxed">
+          <p>
+            Implements the operational methodologies from <i>“Managing physical climate-related risks in loan portfolios: Technical Supplement to the 2024 Climate Risk Landscape Report”</i>, published jointly by the <b>United Nations Environment Programme Finance Initiative (UNEP FI)</b> and <b>Munich Re</b> (May 2024).
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
+            <div className="p-3 rounded-xl bg-chip/60 border border-line flex flex-col gap-1.5">
+              <span className="font-bold text-xs uppercase tracking-wider text-accent">1. The 4-Pillars Strategy Engine</span>
+              <ul className="text-xs space-y-1 list-disc list-inside text-muted">
+                <li><b className="text-ink">Accept:</b> Retain low/moderate risk; price with an asset-level climate spread premium (+bps) based on Expected Annual Loss (EAL).</li>
+                <li><b className="text-ink">Avoid:</b> Flag assets breaching the bank’s Risk Appetite Framework (RAF) due to extreme hazard intensity and collateral devaluation.</li>
+                <li><b className="text-ink">Adapt:</b> Qualify borrowers for <i>Resilience Loans</i> (-25 bps margin rebate) conditional on verified physical building retrofits.</li>
+                <li><b className="text-ink">Transfer:</b> Track uninsured property gaps; mandate NatCat covenants and calculate 3-month disaster <i>Repayment Holiday</i> liquidity buffers.</li>
+              </ul>
+            </div>
+            <div className="p-3 rounded-xl bg-chip/60 border border-line flex flex-col gap-1.5">
+              <span className="font-bold text-xs uppercase tracking-wider text-accent">2. Prudential Credit Risk Transmission</span>
+              <ul className="text-xs space-y-1 list-disc list-inside text-muted">
+                <li><b className="text-ink">Stressed LTV:</b> Tracks post-damage collateral equity: LTV_stress = Loan / (Collateral × (1 - Damage Ratio)), flagging underwater facilities (&gt; 100%).</li>
+                <li><b className="text-ink">Stressed LGD:</b> Collateral destruction reduces recovery value, uplifting baseline LGD (45% → up to 95%).</li>
+                <li><b className="text-ink">Stressed PD:</b> Cash-flow disruptions and business downtime increase borrower default probability.</li>
+                <li><b className="text-ink">IFRS 9 ECL Uplift:</b> ΔECL = (PD_stress × LGD_stress - PD_base × LGD_base) × EAD.</li>
+              </ul>
+            </div>
+          </div>
+          <p className="text-xs text-muted mt-1">
+            <b>Accumulation Monitoring:</b> Aggregates exposure by District / Regional Cluster to identify peril hotspots and Probable Maximum Loss (PML), preventing correlated solvency shocks in line with Munich Re’s Location Risk Intelligence standards.
+          </p>
+        </div>
+      </Card>
       <Card title="Known limitations">
         <ul className="list-disc pl-5 text-sm leading-relaxed flex flex-col gap-1.5 text-muted">
           <li>ERA5 and CMIP6 are ~25 km grids: local extremes (urban heat, convective cloudbursts) can be under-stated.</li>

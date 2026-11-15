@@ -4,7 +4,7 @@ import { MapView, type Theme, type Layer } from '../ui/MapView';
 import { HazardTable } from '../ui/HazardTable';
 import { Card, Button, Field, inputCls, RatingChip, Bar, Stat, cx } from '../ui/kit';
 import { geocode, reverseGeocode, fetchForecast3Day, type Place, type Forecast3Day } from '../data/api';
-import { getSite, summarise, losses, type SiteParams, type LossClass } from '../engine/assess';
+import { getSite, summarise, losses, creditRiskMetrics, type SiteParams, type LossClass } from '../engine/assess';
 import { FAMILIES, HAZARDS, SCENARIOS, YEARS, RATING_COLOR, ratingOf, yearForMaturity, type Scenario, type Year } from '../engine/hazards';
 import { inr, num, parseInr } from '../lib/format';
 import { sectorClass, type Loan } from '../engine/portfolio';
@@ -90,6 +90,7 @@ export const LocationPage: React.FC<{
   const ten = Number(tenure);
   const loanYear = ten > 0 ? yearForMaturity(new Date().getFullYear() + Math.ceil(ten / 12)) : year;
   const loss = site && amt > 0 ? losses(site, amt, cls, scenario, loanYear) : null;
+  const credit = site && amt > 0 ? creditRiskMetrics(site, amt, cls, scenario, loanYear) : null;
   const pins = place || site ? [{
     id: 'here',
     lat: place?.lat ?? site!.lat,
@@ -250,6 +251,46 @@ export const LocationPage: React.FC<{
               <div><p className="text-lg font-bold tabular">{inr(loss.cyclone100)}</p><p className="text-xs opacity-85">Cyclone wind, 1-in-100 event</p></div>
               <div className="col-span-2"><p className="text-lg font-bold tabular">{inr(loss.coastal100)}</p><p className="text-xs opacity-85">Coastal flood, 1-in-100 event</p></div>
               <p className="col-span-2 text-[11px] opacity-80">Rupee losses only where a published damage curve exists (Emanuel 2011 wind on STORM; JRC 2017 Asia depth-damage on JRC / Deltares depths). Other hazards are scored, not priced.</p>
+            </div>
+          )}
+          {credit && (
+            <div className="rounded-xl bg-black/15 p-3 flex flex-col gap-2 border border-white/10 mt-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider">UNEP FI Strategy</span>
+                <span className={cx('px-2.5 py-0.5 rounded-full text-xs font-bold uppercase',
+                  credit.strategy === 'Avoid' ? 'bg-[#dc2626] text-white' :
+                  credit.strategy === 'Adapt' ? 'bg-[#10b981] text-white' :
+                  credit.strategy === 'Transfer' ? 'bg-[#0284c7] text-white' : 'bg-white/20 text-white')}>
+                  {credit.strategy}
+                </span>
+              </div>
+              <p className="text-[11px] opacity-90 leading-normal">{credit.strategyReason}</p>
+              <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-white/10">
+                <div>
+                  <span className="opacity-75 block text-[10px]">Stressed LTV</span>
+                  <span className={cx('font-bold', credit.isUnderwater ? 'text-[#fca5a5]' : 'text-white')}>
+                    {Math.round(credit.stressedLtv * 100)}% {credit.isUnderwater ? '(Underwater)' : ''}
+                  </span>
+                </div>
+                <div>
+                  <span className="opacity-75 block text-[10px]">IFRS 9 ECL Uplift</span>
+                  <span className="font-bold text-white">+{inr(credit.eclUplift)}</span>
+                </div>
+                <div>
+                  <span className="opacity-75 block text-[10px]">Resilience Rebate</span>
+                  <span className="font-bold text-[#86efac]">{credit.strategy === 'Adapt' ? '-25 bps' : 'Standard'}</span>
+                </div>
+                <div>
+                  <span className="opacity-75 block text-[10px]">Repayment Buffer</span>
+                  <span className="font-bold text-white">{inr(credit.repaymentHolidayInr)}</span>
+                </div>
+              </div>
+              {credit.resilienceMeasures.length > 0 && (
+                <div className="text-[11px] pt-1 border-t border-white/10 opacity-90">
+                  <span className="font-semibold block text-white mb-0.5">Recommended Adaptation:</span>
+                  <span className="italic">{credit.resilienceMeasures[0]}</span>
+                </div>
+              )}
             </div>
           )}
           <button disabled={!site || !(amt > 0) || !(ten > 0)} className={cx('min-h-[42px] rounded-lg border border-current/40 font-semibold text-sm inline-flex items-center justify-center gap-2')}

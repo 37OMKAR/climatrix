@@ -929,6 +929,131 @@ export function losses(site: SiteParams, amount: number, cls: LossClass, s: Scen
   return { cycloneEal, cyclone100, riverEal, river100, coastal100, totalEal: parts.length ? parts.reduce((a, b) => a + b, 0) : NaN };
 }
 
+// ------------------------------------------------------------------ UNEP FI & Munich Re Banking Metrics
+export type PillarStrategy = 'Accept' | 'Avoid' | 'Adapt' | 'Transfer';
+
+export interface CreditRiskMetrics {
+  basePd: number;
+  stressedPd: number;
+  baseLgd: number;
+  stressedLgd: number;
+  baseLtv: number;
+  stressedLtv: number;
+  isUnderwater: boolean;
+  damage100: number;
+  damageRatio100: number;
+  baseEcl: number;
+  stressedEcl: number;
+  eclUplift: number;
+  strategy: PillarStrategy;
+  strategyReason: string;
+  resilienceMeasures: string[];
+  repaymentHolidayInr: number;
+  pricingSpreadBps: number;
+}
+
+export function creditRiskMetrics(
+  site: SiteParams,
+  amount: number,
+  cls: LossClass,
+  s: Scenario,
+  y: Year,
+  basePd = 0.02,
+  baseLgd = 0.45,
+  baseLtv = 0.70,
+): CreditRiskMetrics {
+  const l = losses(site, amount, cls, s, y);
+  const sum = summarise(site, s, y);
+  const maxScore = sum.maxScore || 0;
+  const topHazardId = sum.top?.id ?? '';
+
+  // 1-in-100 acute physical loss across modeled perils
+  const acuteParts = [l.cyclone100, l.river100, l.coastal100].filter(Number.isFinite);
+  const damage100 = acuteParts.length ? Math.max(...acuteParts) : 0;
+  const collateralValue = baseLtv > 0 ? amount / baseLtv : amount;
+  const damageRatio100 = collateralValue > 0 ? Math.min(0.95, damage100 / collateralValue) : 0;
+
+  // Stressed LTV = loan amount / post-damage collateral value
+  const postDamageCollateral = Math.max(collateralValue * 0.05, collateralValue * (1 - damageRatio100));
+  const stressedLtv = Number.isFinite(amount / postDamageCollateral) ? Math.min(5.0, amount / postDamageCollateral) : baseLtv;
+  const isUnderwater = stressedLtv > 1.0;
+
+  // Probability of default (PD) uplift from cash-flow shock / DSCR degradation
+  const scoreFactor = Math.pow(maxScore / 40, 1.8) * 0.35;
+  const stressedPd = Math.min(0.35, Math.max(basePd, basePd * (1 + scoreFactor)));
+
+  // Loss Given Default (LGD) uplift from collateral devaluation
+  const stressedLgd = Math.min(0.95, Math.max(baseLgd, baseLgd + damageRatio100 * 0.55));
+
+  // IFRS 9 / CECL Expected Credit Loss (ECL = PD × LGD × EAD)
+  const baseEcl = basePd * baseLgd * amount;
+  const stressedEcl = stressedPd * stressedLgd * amount;
+  const eclUplift = Math.max(0, stressedEcl - baseEcl);
+
+  // Pricing spread premium in bps (1 bps = 0.01%)
+  const eal = Number.isFinite(l.totalEal) ? l.totalEal : 0;
+  const pricingSpreadBps = amount > 0 ? Math.min(250, Math.round((eal / amount) * 10000)) : 0;
+
+  // Repayment Holiday Coverage (3 months of standard interest/EMI buffer: ~2.25% of loan)
+  const repaymentHolidayInr = Math.round((amount * 0.09) / 4);
+
+  // Specific Resilience Engineering Recommendations based on top peril
+  const resilienceMeasures: string[] = [];
+  if (topHazardId.includes('flood') || topHazardId.includes('rain') || topHazardId.includes('sea_level')) {
+    resilienceMeasures.push('Deploy perimeter flood barriers & backflow preventers');
+    resilienceMeasures.push('Elevate primary electrical substations and critical backup power above 100-yr flood level');
+  } else if (topHazardId.includes('cyclone') || topHazardId.includes('wind')) {
+    resilienceMeasures.push('Reinforce structural roof-to-wall ties & install hurricane-rated impact glazing');
+    resilienceMeasures.push('Anchor roof-mounted mechanical and HVAC chillers against high-velocity shear winds');
+  } else if (topHazardId.includes('heat')) {
+    resilienceMeasures.push('Apply high-albedo cool roof thermal coatings and exterior solar louvers');
+    resilienceMeasures.push('Upgrade HVAC chillers to variable-speed units and add cooling redundancy');
+  } else if (topHazardId.includes('water') || topHazardId.includes('drought')) {
+    resilienceMeasures.push('Install industrial greywater recycling and smart sub-metering leak sensors');
+    resilienceMeasures.push('Construct on-site rainwater retention cisterns to buffer municipal supply cuts');
+  } else if (topHazardId.includes('wildfire')) {
+    resilienceMeasures.push('Establish a 30-meter non-combustible defensible perimeter and ember-proof mesh vents');
+    resilienceMeasures.push('Install independent on-site pressurized exterior water sprinkler loop');
+  } else {
+    resilienceMeasures.push('Perform building envelope climate-readiness audit and enhance drainage grading');
+  }
+
+  // UNEP FI / Munich Re 4-Pillar Strategy Selection
+  let strategy: PillarStrategy = 'Accept';
+  let strategyReason = 'Low/moderate physical hazard. Absorb in balance sheet with climate spread premium.';
+
+  if (maxScore >= 85 && (isUnderwater || damageRatio100 >= 0.35)) {
+    strategy = 'Avoid';
+    strategyReason = 'Violates Risk Appetite Framework (RAF): extreme acute peril with collateral wipeout risk.';
+  } else if (maxScore >= 60 || damageRatio100 >= 0.15) {
+    strategy = 'Adapt';
+    strategyReason = 'Primary candidate for Resilience Loan (-25 bps margin rebate) to harden collateral.';
+  } else if (damageRatio100 > 0.25 || acuteParts.some((v) => v > amount * 0.2)) {
+    strategy = 'Transfer';
+    strategyReason = 'High acute loss profile. Require verified NatCat insurance covenant & repayment holiday cover.';
+  }
+
+  return {
+    basePd,
+    stressedPd,
+    baseLgd,
+    stressedLgd,
+    baseLtv,
+    stressedLtv,
+    isUnderwater,
+    damage100,
+    damageRatio100,
+    baseEcl,
+    stressedEcl,
+    eclUplift,
+    strategy,
+    strategyReason,
+    resilienceMeasures,
+    repaymentHolidayInr,
+    pricingSpreadBps,
+  };
+}
+
 // ------------------------------------------------------------------ cache (per ~100 m cell, 90 days)
 const KEY = (lat: number, lon: number) => `climaris:site:v4:${lat.toFixed(3)},${lon.toFixed(3)}`;
 export function cachedSite(lat: number, lon: number): SiteParams | null {

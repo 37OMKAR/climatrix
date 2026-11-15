@@ -231,6 +231,36 @@ Carbon prices are dynamically interpolated to loan maturity in both **USD (2010)
 
 ---
 
+### 9. UNEP FI & Munich Re Banking Framework (May 2024)
+Directly operationalizes the methodologies from ***"Managing physical climate-related risks in loan portfolios: Technical Supplement to the 2024 Climate Risk Landscape Report"*** (UNEP FI & Munich Re, May 2024):
+
+#### A. The 4-Pillar Portfolio Strategy Engine
+* **Accept**: For low/moderate risk assets ($S_{\text{max}} < 60$), retain on balance sheet and apply an asset-level **Climate Spread Premium**:
+  $$\text{Margin Premium (bps)} = \min\left(250, \; \frac{\text{EAL}}{\text{Loan Amount}} \times 10,000\right)$$
+* **Avoid**: Automatically flags loans breaching the bank's **Risk Appetite Framework (RAF)** ($S_{\text{max}} \ge 85$ and $\text{LTV}_{\text{stress}} > 1.2$), warning credit committees against extreme physical collateral wipeout.
+* **Adapt (Highest-Rated Bank Strategy)**: Flags facilities with high physical exposure as candidates for **Resilience Loans** (-25 bps margin rebate) linked to certified engineering hardening (flood barriers, roof wind strapping, cool roofs, greywater recycling).
+* **Transfer**: Identifies the **Insurance Protection Gap** (assets with high acute damage lacking verified NatCat policies) and calculates pre-approved 3-month **Repayment Holiday / Disaster Moratorium Buffers**:
+  $$\text{Repayment Buffer} = \frac{\text{Loan Amount} \times 9\%}{4}$$
+
+#### B. Prudential Credit Risk & Balance Sheet Transmission
+1. **Climate-Stressed Loan-to-Value ($\text{LTV}_{\text{stress}}$)**:
+   Measures post-disaster collateral equity following a 1-in-100-year acute hazard event ($d_{100}$):
+   $$\text{LTV}_{\text{stress}} = \frac{\text{Loan Amount}}{\text{Collateral Value} \times (1 - d_{100})}$$
+   *Identifies "Underwater Collateral" where $\text{LTV}_{\text{stress}} > 100\%$.*
+2. **Loss Given Default Uplift ($\Delta \text{LGD}$)**:
+   Accounts for physical degradation of collateral recovery value:
+   $$\text{LGD}_{\text{stress}} = \min\left(0.95, \; \text{LGD}_{\text{base}} + 0.55 \cdot d_{100}\right)$$
+3. **Probability of Default Surge ($\Delta \text{PD}$)**:
+   Reflects borrower revenue loss, supply-chain interruption, and Debt Service Coverage Ratio (DSCR) shocks:
+   $$\text{PD}_{\text{stress}} = \min\left(0.35, \; \text{PD}_{\text{base}} \times \left[1 + \left(\frac{S_{\text{max}}}{40}\right)^{1.8} \times 0.35\right]\right)$$
+4. **IFRS 9 / CECL Climate Expected Credit Loss Uplift**:
+   $$\Delta \text{ECL} = \left(\text{PD}_{\text{stress}} \cdot \text{LGD}_{\text{stress}} - \text{PD}_{\text{base}} \cdot \text{LGD}_{\text{base}}\right) \times \text{EAD}$$
+
+#### C. Munich Re Accumulation Monitoring
+Aggregates spatial loan exposure across Districts, States, and River Basins to detect correlated cluster risks, tracking total capital at risk, high-risk ratios, and **Probable Maximum Loss (PML 1-in-100 yr)** to protect institutional solvency.
+
+---
+
 ## 🗺️ Geospatial Layer Architecture
 
 Climatrix includes multi-resolution basemaps accessible directly via the layer control:
