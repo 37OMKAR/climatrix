@@ -83,7 +83,7 @@ async function run() {
   await page.screenshot({ path: path.join(dir, 'climatrix_location_screening.png'), fullPage: false });
   console.log('Saved climatrix_location_screening.png');
 
-  // 2. Capture Portfolio Page (Reload so seeded loans load and compute)
+  // 2. Capture Portfolio Page (Standard Loans View)
   console.log('Capturing Portfolio Page...');
   const portfolioBtn = await page.$('button:has-text("Portfolio")');
   if (portfolioBtn) {
@@ -91,6 +91,36 @@ async function run() {
     await page.waitForTimeout(3500); // Give time for sites to compute
     await page.screenshot({ path: path.join(dir, 'climatrix_portfolio_stress_test.png'), fullPage: false });
     console.log('Saved climatrix_portfolio_stress_test.png');
+
+    // 2b. Capture 4-Pillars Strategy View
+    console.log('Capturing 4-Pillars Strategy View...');
+    const fourPillarsBtn = await page.$('button:has-text("4-Pillars Strategy")');
+    if (fourPillarsBtn) {
+      await fourPillarsBtn.click();
+      await page.waitForTimeout(1000);
+      await page.screenshot({ path: path.join(dir, 'climatrix_four_pillars.png'), fullPage: false });
+      console.log('Saved climatrix_four_pillars.png');
+    }
+
+    // 2c. Capture BCBS Pillar 3 Template CRFR2 View
+    console.log('Capturing BCBS Pillar 3 Template CRFR2 View...');
+    const bcbsBtn = await page.$('button:has-text("BCBS Pillar 3")');
+    if (bcbsBtn) {
+      await bcbsBtn.click();
+      await page.waitForTimeout(1000);
+      await page.screenshot({ path: path.join(dir, 'climatrix_bcbs_crfr2.png'), fullPage: false });
+      console.log('Saved climatrix_bcbs_crfr2.png');
+    }
+
+    // 2d. Capture Munich Re Accumulation Monitoring View
+    console.log('Capturing Accumulation Monitoring View...');
+    const accumBtn = await page.$('button:has-text("Accumulation")');
+    if (accumBtn) {
+      await accumBtn.click();
+      await page.waitForTimeout(1000);
+      await page.screenshot({ path: path.join(dir, 'climatrix_accumulation.png'), fullPage: false });
+      console.log('Saved climatrix_accumulation.png');
+    }
   }
 
   // 3. Capture Methodology & Dataset Page

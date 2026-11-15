@@ -6,7 +6,8 @@
 
 [![Production Ready](https://img.shields.io/badge/Status-Production--Ready-059669.svg?style=for-the-badge&logo=shield)](https://github.com/37OMKAR/climatrix)
 [![IPCC AR6 & CMIP6](https://img.shields.io/badge/Climate%20Standard-IPCC%20AR6%20%7C%20CMIP6-2563EB.svg?style=for-the-badge)](https://www.ipcc.ch/assessment-report/ar6/)
-[![TCFD & ISSB Aligned](https://img.shields.io/badge/Regulatory-TCFD%20%7C%20ISSB%20S2%20%7C%20BCBS-7C3AED.svg?style=for-the-badge)](https://www.fsb-tcfd.org/)
+[![UNEP FI & Munich Re](https://img.shields.io/badge/Banking%20Framework-UNEP%20FI%20%7C%20Munich%20Re-0891B2.svg?style=for-the-badge)](https://www.unepfi.org/)
+[![BCBS Pillar 3 Aligned](https://img.shields.io/badge/Regulatory-BCBS%20CRFR2%20%7C%20TCFD%20%7C%20ISSB-7C3AED.svg?style=for-the-badge)](https://www.bis.org/bcbs/)
 [![Tests Passing](https://img.shields.io/badge/Verification-48%2F48%20Passed%20(100%25)-16A34A.svg?style=for-the-badge)](scripts/test_engine.ts)
 [![License](https://img.shields.io/badge/License-MIT-EA580C.svg?style=for-the-badge)](LICENSE)
 
@@ -15,7 +16,7 @@
 ## 📸 Platform Interface Showcase
 
 ### 1. Single Asset Location Due Diligence & 26-Hazard Screening
-*Instant sub-16ms pin drops with high-resolution Google Earth Hybrid Satellite imagery, 3-day operational weather forecast, ground elevation, slope, coastal distance, and IPCC AR6 multi-scenario projections.*
+*Instant sub-16ms marker drops on high-resolution Google Earth Hybrid Satellite imagery, 3-day operational weather forecast, ground elevation, slope, coastal distance, and IPCC AR6 multi-scenario projections.*
 
 ![Climatrix Single Asset Location Screening](docs/images/climatrix_location_screening.png)
 
@@ -28,7 +29,28 @@
 
 ---
 
-### 3. Open Data Scientific Provenance & Engine Health
+### 3. UNEP FI 4-Pillar Strategy Engine (Accept, Avoid, Adapt, Transfer)
+*Loan-level underwriting strategy recommendations directly operationalizing the UNEP FI & Munich Re (May 2024) Framework, featuring resilience loan margin discounts (-25 bps) and pre-approved 3-month disaster repayment holiday buffers.*
+
+![Climatrix 4-Pillars Strategy Engine](docs/images/climatrix_four_pillars.png)
+
+---
+
+### 4. Basel Committee (BCBS) Pillar 3 Template CRFR2 Physical Risk Disclosures
+*Automated regulatory disclosure table partitioning banking book gross carrying amounts across peril families, maturity horizons ($\le 5\text{ yrs}$, $5-10\text{ yrs}$, $> 10\text{ yrs}$), and uninsured protection gap.*
+
+![Climatrix BCBS Pillar 3 Template CRFR2](docs/images/climatrix_bcbs_crfr2.png)
+
+---
+
+### 5. Munich Re Accumulation Monitoring & Geographic Clustering
+*District and state-level concentration risk monitoring, tracking total capital at risk, high-risk ratios, and Probable Maximum Loss (PML 1-in-100 yr) to prevent correlated disaster solvency shocks.*
+
+![Climatrix Accumulation Monitoring](docs/images/climatrix_accumulation.png)
+
+---
+
+### 6. Open Data Scientific Provenance & Engine Health
 *Transparent formula documentation, live endpoint health monitors, license compliance tracking, and zero-dependency local CMIP6 physical science fallback.*
 
 ![Climatrix Methodology & Open Data Provenance](docs/images/climatrix_methodology_datasets.png)
@@ -51,26 +73,26 @@ Legacy climate risk analytics vendors charge **$50,000 to $200,000/year** for op
    • GPS / OSM Nominatim              • Copernicus DEM (30m)                 • Damage Curves D(h), D(v)
    • 90m Spatial Tile Matching        • ERA5-Land Hourly (9km)               • Expected Annual Loss (EAL)
    • 0.05° Grid Clustering            • CMIP6 Ensemble (0.25°)               • Tail VaR 95% & VaR 99.5%
-   • IndexedDB Local Cache            • IPCC AR6 SSP1 to SSP5                • Loan Maturity Matching
+   • IndexedDB Local Cache            • IPCC AR6 SSP1 to SSP5                • Basel ΔPD, Stressed LGD & LTV
           │                                      │                                      │
           └──────────────────────────────────────┴──────────────────────────────────────┘
                                                  │
                                                  ▼
-                       [ Regulatory Export: TCFD, ISSB S2, BCBS & RBI ]
+               [ Regulatory Export: BCBS Pillar 3 CRFR2, UNEP FI, TCFD, ISSB S2, RBI ]
 ```
 
 ---
 
-## 💰 Costing, Pricing & ROI Comparison
+## 💰 Costing, Pricing & Commercial ROI Comparison
 
 ### Why Pay $100,000/Year for Black-Box Scores?
 
 | Platform Tier | Monthly Cost | Per-Query Cost | Features Included | Best For |
 | :--- | :--- | :--- | :--- | :--- |
-| **Climatrix Community (Active)** | **$0.00 / month** | **$0.00** | Full 26 hazards, downscaled CMIP6 baseline, Google Earth basemaps, 3-day weather, portfolio screening, CSV export | Risk analysts, credit officers, SME banks, developers |
-| **Climatrix Dedicated Cluster** | **€29 / month** (~$31) | **$0.00** (Unlimited) | Dedicated commercial Open-Meteo endpoint (`customer-*.open-meteo.com`), 0 rate limits, SLA, bulk portfolio concurrency | Institutional lenders, retail banks with >50,000 loans |
+| **Climatrix Community (Active)** | **$0.00 / month** | **$0.00** | Full 26 hazards, downscaled CMIP6 baseline, Google Maps & Earth basemaps, 3-day weather, portfolio screening, BCBS CRFR2 reporting, CSV export | Risk analysts, credit officers, SME banks, developers |
+| **Climatrix Dedicated Cluster** | **€29 / month** (~$31) | **$0.00** (Unlimited) | Dedicated commercial Open-Meteo endpoint (`customer-*.open-meteo.com`), 0 rate limits, 99.9% uptime SLA, high-concurrency bulk portfolio API | Institutional lenders, retail banks with >50,000 loans |
 | **Climatrix Private VPC / Docker** | **$5–$15 / month** (VPS) | **$0.00** (Unlimited) | 100% self-hosted, private cloud (AWS/GCP/Azure), air-gapped corporate network, zero external API dependencies | Tier-1 Banks, Defense, Sovereign Wealth Funds |
-| **Legacy Vendors (Moody's, MSCI, Jupiter)** | **$5,000–$15,000 / month** ($60k–$180k/yr) | **$2.50 – $10.00** / site | Proprietary black-box scores, locked formats, vendor lock-in | Legacy enterprise procurement |
+| **Legacy Vendors (Moody's, MSCI, Jupiter)** | **$5,000–$15,000 / month** ($60k–$180k/yr) | **$2.50 – $10.00** / site | Proprietary black-box scores, locked export formats, vendor lock-in | Legacy enterprise procurement |
 
 > **Annual Savings**: Switching from legacy vendors to Climatrix yields **>99.5% cost reduction** while providing verifiable scientific equations acceptable to banking regulators.
 
@@ -82,18 +104,24 @@ Legacy climate risk analytics vendors charge **$50,000 to $200,000/year** for op
 1. **Locate the Asset**:
    * Type an address, PIN code, or place name into the top search bar (e.g., *"Juhu Beach, Mumbai"* or *"25.7617, -80.1918"*).
    * Or click anywhere directly on the interactive map: the marker drops **instantly in <16ms**.
-2. **Select Climate Horizon & Scenario**:
+2. **Select Basemap Layer**:
+   * Switch between **Google Maps (Streets)**, **Google Earth (Hybrid Satellite)**, **Google Terrain**, **Esri World Dark Gray Canvas**, or **OpenStreetMap** with zero watermarks.
+3. **Select Climate Horizon & Scenario**:
    * Choose between IPCC Shared Socioeconomic Pathways:
      * **SSP1-2.6** (Paris Agreement 1.5°C goal)
      * **SSP2-4.5** (Middle of the road / current national pledges)
      * **SSP3-7.0** (High emissions / regional rivalry)
      * **SSP5-8.5** (Fossil-fueled development / worst-case stress test)
    * Toggle projection years: **Now (2025)**, **2030**, **2040**, **2050**, **2060**, **2070**, or **2080**.
-3. **Inspect Physical Risk Metrics**:
+4. **Inspect Physical Risk Metrics**:
    * Review micro-topography: Ground Elevation (Copernicus DEM), Distance to Coast, Terrain Slope (Horn's algorithm), and Height Above Drainage (HAND).
    * Check the **Next 3 Days Operational Weather Outlook** for immediate severe rainfall or heat warnings.
    * Expand any of the 26 physical hazard rows to inspect return-period values (e.g. 1-in-100-year river flood depth, 1-in-100-year tropical cyclone wind speed).
-4. **Calculate Financial Loss**:
+5. **Review UNEP FI Underwriting Recommendations**:
+   * Inspect the asset's **4-Pillar Strategy Recommendation** (`Accept`, `Avoid`, `Adapt`, `Transfer`).
+   * Review physical engineering adaptation measures (flood barriers, roof anchoring, cool roofs, water harvesting).
+   * Evaluate **Resilience Loan Eligibility** (potential -25 bps margin rebate) and pre-calculated **3-month Disaster Repayment Holiday Buffer**.
+6. **Calculate Financial Loss**:
    * Enter the loan or asset exposure amount (e.g., ₹50,000,000 or $5,000,000) and tenure (months).
    * Select asset classification: Commercial, Industrial, Residential, Infrastructure, or Agriculture.
    * The platform immediately outputs **Expected Annual Loss (EAL)** and 100-year loss in local currency.
@@ -109,13 +137,21 @@ Legacy climate risk analytics vendors charge **$50,000 to $200,000/year** for op
 3. **Automated Geocoding & Batch Evaluation**:
    * Unlocated rows are geocoded asynchronously via OpenStreetMap Nominatim.
    * Distinct spatial sites are computed in parallel with IndexedDB caching.
-4. **Maturity Horizon Alignment**:
-   * Toggle **"At maturity"**: scores each loan at the first decade on or after its loan maturity, ensuring short-term debt is not unfairly penalized against 2080 climate change.
-5. **Analyze Exposure & Tail Risk**:
-   * Review the **Total Exposure** card, **High/Severe Risk Amount**, and **Total Portfolio EAL**.
-   * Analyze exposure distributions by rating band, UNEP FI sector transition scores, and hazard families.
+4. **Switch Between the 5 Institutional Views**:
+   * **Loans**: Standard granular facility ledger with borrower details, risk scores, and transition ratings.
+   * **Accumulation (Munich Re)**: District/cluster aggregation tracking total capital at risk, high-risk ratios, concentration status, and **1-in-100-year Probable Maximum Loss (PML)**.
+   * **4-Pillars Strategy (UNEP FI)**: Categorizes every facility into Accept (spread premium), Avoid (RAF limit breach), Adapt (resilience discount), or Transfer (insurance gap & disaster holiday buffer).
+   * **Credit & IFRS 9 ECL**: Calculates base vs. climate-stressed LTV, LGD, PD, and incremental IFRS 9 Expected Credit Loss uplift.
+   * **BCBS Pillar 3 (CRFR2)**: Formats your loan book into the Basel Committee Template CRFR2 disclosure table across maturity buckets ($\le 5\text{y}$, $5-10\text{y}$, $> 10\text{y}$) and uninsured protection gap.
+5. **Monitor Risk Appetite Framework (RAF) & 5 KRIs**:
+   * The sidebar continuously monitors the bank's 5 Board-level Key Risk Indicators:
+     * **High/Severe Risk Ratio** (Limit: $<25\%$)
+     * **Stressed LTV Breach Ratio** (Limit: $<85\%$)
+     * **Portfolio $\Delta \text{PD}$ Surge** (Limit: $<+1.5\%$)
+     * **IFRS 9 ECL Uplift Burden** (Limit: $<5.0\%$ of gross book)
+     * **Single District Accumulation Cap** (Limit: $<15\%$ in any single high-risk district)
 6. **Regulatory Export**:
-   * Click **CSV** to download the complete audit-ready loan appraisal ledger with all 26 hazard scores and financial loss estimations.
+   * Click **CSV** to download the complete audit-ready loan appraisal ledger with all 26 hazard scores, prudential credit metrics ($\Delta \text{PD}, \Delta \text{LGD}, \text{LTV}_{\text{stress}}, \Delta \text{ECL}$), and UNEP FI strategy assignments.
 
 ---
 
@@ -130,9 +166,44 @@ Legacy climate risk analytics vendors charge **$50,000 to $200,000/year** for op
 
 ---
 
+## 🌪️ The 26 Physical Climate Hazards Reference Catalog
+
+Climatrix evaluates 26 discrete acute and chronic perils across 5 geophysical families:
+
+| Peril Code | Peril Name | Family | Type | Indicator Unit | Return Periods / Horizons | Scientific Source Dataset | Spatial Resolution |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `river_flood` | Riverine Flooding | Water | Acute | Inundation Depth (m) | 10, 50, 100, 500-yr | JRC GloFAS v2.1.2 | 90 m |
+| `coastal_flood` | Coastal Storm Surge | Water | Acute | Inundation Depth (m) | 10, 50, 100, 500-yr | Deltares / NASADEM | 90 m |
+| `heavy_rain` | Cloudburst & Pluvial | Water | Acute | 24-hr Rainfall (mm) | 10, 50, 100-yr | ECMWF ERA5-Land EV1 | 9 km |
+| `sea_level_rise` | Chronic Sea Level Rise | Water | Chronic | Mean Sea Level Rise (m) | 2030, 2050, 2080 | IPCC AR6 GMSL | 0.25° |
+| `water_stress` | Baseline Water Stress | Water | Chronic | Water Withdrawal / Supply | Baseline to 2080 | WRI Aqueduct 4.0 | Hydro-Basin |
+| `water_scarcity` | Seasonal Water Scarcity | Water | Chronic | Monthly Deficit Index | Baseline to 2080 | WRI Aqueduct 4.0 | Hydro-Basin |
+| `groundwater` | Groundwater Depletion | Water | Chronic | Water Table Trend (cm/yr) | Baseline to 2080 | WRI Aqueduct / GRACE | Hydro-Basin |
+| `drought` | Hydrological Drought | Water | Chronic | SPEI-12 Water Deficit | 10, 50-yr | Hargreaves PET / ERA5 | 9 km |
+| `extreme_heat` | Extreme Heat (Dry-Bulb) | Heat/Cold | Acute | Daily Maximum Temp (°C) | 10, 50, 100-yr | ECMWF ERA5-Land / CMIP6 | 9 km / 0.25° |
+| `heatwave` | Consecutive Heatwave Days | Heat/Cold | Chronic | Duration (Days $>95\text{th}$ %ile) | Annual Average | CMIP6 HighResMIP | 0.25° |
+| `heat_stress` | Humid Heat Stress ($T_w$) | Heat/Cold | Chronic | Wet-Bulb Temperature (°C) | Stull (2011) Thermodynamic | ERA5-Land (T + RH) | 9 km |
+| `cold` | Extreme Cold & Frost | Heat/Cold | Acute | Daily Minimum Temp (°C) | 10, 50-yr | ECMWF ERA5-Land | 9 km |
+| `permafrost` | Permafrost Thaw | Heat/Cold | Chronic | Mean Ground Temp (°C) | Baseline to 2080 | Obu et al. (2019) / CMIP6 | 1 km |
+| `heavy_snow` | Extreme Snowfall | Heat/Cold | Acute | 24-hr Snow Water Eq (mm) | 10, 50-yr | ECMWF ERA5-Land | 9 km |
+| `cyclone` | Tropical Cyclone Wind | Wind | Acute | Sustained Wind Speed (km/h) | 10, 50, 100, 500-yr | STORM Synthetic Tracks | 10 km |
+| `windstorm` | Extratropical Windstorm | Wind | Acute | Peak Gust Speed (km/h) | 10, 50, 100-yr | ECMWF ERA5-Land | 9 km |
+| `dust` | Sand & Dust Storms | Wind | Acute | Aerosol Optical Depth (AOD) | Annual Peak AOD | Copernicus CAMS | 0.4° |
+| `wildfire` | Wildfire Danger | Fire | Acute | Fire Weather Index (FWI) | 10, 50-yr | Copernicus EFFIS / ERA5 | 9 km |
+| `earthquake` | Seismic Ground Shaking | Geological | Acute | Peak Ground Accel ($g$, PGA) | 475, 2475-yr | USGS / GEM Global Model | Point catalog |
+| `tsunami` | Tsunami Inundation | Geological | Acute | Runup Height (m) | Historical Catalog | NOAA NCEI Runup DB | Point records |
+| `volcano` | Volcanic Ash & Tephra | Geological | Acute | Distance to Active Vent (km) | Smithsonian Catalog | Global Volcanism Program | Point catalog |
+| `landslide` | Rainfall Landslide Hazard | Geological | Acute | Susceptibility Index (0–100) | Horn Slope + ILSM | Copernicus DEM (30m) | 30 m |
+| `avalanche` | Snow Avalanche Risk | Geological | Acute | Slope & Snow Pack Rating | 10-yr Snow + DEM | Copernicus DEM (30m) | 30 m |
+| `subsidence` | Ground Land Subsidence | Geological | Chronic | InSAR Subsidence Rate (mm/yr) | Cumulative 10-yr | Davydzenka et al. (2024) | ~1 km |
+| `lightning` | Cloud-to-Ground Lightning | Severe Weather | Acute | Flash Density (flashes/$\text{km}^2/\text{yr}$) | Annual Mean Climatology | WWLLN / WGLC | 0.5° |
+| `hail` | Severe Hailstorm Risk | Severe Weather | Acute | CAPE $\times$ 0–6km Shear Index | 10-yr Severe Convective | ERA5-Land Reanalysis | 9 km |
+
+---
+
 ## 🔬 Mathematical Formulations & Calculation Methodology
 
-Nothing in Climatrix is arbitrary or simulated. Every score and financial loss output is derived from physics, extreme value theory, and engineering damage curves.
+Nothing in Climatrix is arbitrary or simulated. Every score, financial metric, and regulatory table is derived from physics, extreme value theory, and engineering damage curves.
 
 ---
 
@@ -176,7 +247,7 @@ $$V(d_{\text{coast}}) = \min\left(V_0, \; 48 + (V_0 - 48) \exp\left(-\frac{0.095
 
 ### 4. Micro-Topographic Slope & Landslide Risk
 #### Horn's 3×3 Digital Elevation Algorithm (1981)
-Terrain gradients are extracted from a 3×3 kernel of **Copernicus GLO-30 DEM** radar pixels ($\approx 90\text{m}$ resolution) centered on the asset coordinates:
+Terrain gradients are extracted from a 3×3 kernel of **Copernicus GLO-30 DEM** radar pixels ($\approx 30\text{m}$ resolution) centered on the asset coordinates:
 
 $$\frac{\partial z}{\partial x} = \frac{(z_{tr} + 2z_r + z_{br}) - (z_{tl} + 2z_l + z_{bl})}{8 \, \Delta x}, \quad \frac{\partial z}{\partial y} = \frac{(z_{tl} + 2z_t + z_{tr}) - (z_{bl} + 2z_b + z_{br})}{8 \, \Delta y}$$
 
@@ -220,25 +291,14 @@ $$\text{EAL} = \text{Exposure Value} \times \int_{0}^{1} D\left(I(p)\right) dp$$
 
 ---
 
-### 8. Transition Risk & NGFS Shadow Carbon Pricing
-Evaluates UNEP FI sector transition heatmaps mapped against **NGFS (Network for Greening the Financial System)** Phase IV Integrated Assessment Models (**GCAM 6.0** & **MESSAGEix**):
-* **Net Zero 2050** (Orderly 1.5°C)
-* **Below 2°C** (Orderly mild policy tightening)
-* **Delayed Transition** (Disorderly abrupt carbon price surge after 2030)
-* **Current Policies** (Hot house world baseline)
-
-Carbon prices are dynamically interpolated to loan maturity in both **USD (2010)** and **local currency (INR/t $\text{CO}_2\text{e}$)** using purchasing power parity and FX parameters.
-
----
-
-### 9. UNEP FI & Munich Re Banking Framework (May 2024)
-Directly operationalizes the methodologies from ***"Managing physical climate-related risks in loan portfolios: Technical Supplement to the 2024 Climate Risk Landscape Report"*** (UNEP FI & Munich Re, May 2024):
+### 8. UNEP FI & Munich Re Banking Framework (May 2024 & 2026 Standards)
+Directly operationalizes the methodologies from ***"Managing physical climate-related risks in loan portfolios: Technical Supplement to the 2024 Climate Risk Landscape Report"*** (UNEP FI & Munich Re, May 2024) and the UNEP FI Risk Centre 2026 guidelines:
 
 #### A. The 4-Pillar Portfolio Strategy Engine
-* **Accept**: For low/moderate risk assets ($S_{\text{max}} < 60$), retain on balance sheet and apply an asset-level **Climate Spread Premium**:
+* **Accept**: For low/moderate risk assets ($S_{\text{max}} < 60$), retain on balance sheet and apply an asset-level **Climate Margin Spread Premium**:
   $$\text{Margin Premium (bps)} = \min\left(250, \; \frac{\text{EAL}}{\text{Loan Amount}} \times 10,000\right)$$
 * **Avoid**: Automatically flags loans breaching the bank's **Risk Appetite Framework (RAF)** ($S_{\text{max}} \ge 85$ and $\text{LTV}_{\text{stress}} > 1.2$), warning credit committees against extreme physical collateral wipeout.
-* **Adapt (Highest-Rated Bank Strategy)**: Flags facilities with high physical exposure as candidates for **Resilience Loans** (-25 bps margin rebate) linked to certified engineering hardening (flood barriers, roof wind strapping, cool roofs, greywater recycling).
+* **Adapt (Highest-Rated Commercial Bank Strategy)**: Flags facilities with high physical exposure as candidates for **Resilience Loans** (-25 bps margin rebate) linked to certified engineering hardening (flood barriers, roof wind strapping, cool roofs, greywater recycling).
 * **Transfer**: Identifies the **Insurance Protection Gap** (assets with high acute damage lacking verified NatCat policies) and calculates pre-approved 3-month **Repayment Holiday / Disaster Moratorium Buffers**:
   $$\text{Repayment Buffer} = \frac{\text{Loan Amount} \times 9\%}{4}$$
 
@@ -257,10 +317,10 @@ Directly operationalizes the methodologies from ***"Managing physical climate-re
    $$\Delta \text{ECL} = \left(\text{PD}_{\text{stress}} \cdot \text{LGD}_{\text{stress}} - \text{PD}_{\text{base}} \cdot \text{LGD}_{\text{base}}\right) \times \text{EAD}$$
 
 #### C. Munich Re Accumulation Monitoring
-Aggregates spatial loan exposure across Districts, States, and River Basins to detect correlated cluster risks, tracking total capital at risk, high-risk ratios, and **Probable Maximum Loss (PML 1-in-100 yr)** to protect institutional solvency.
+Aggregates spatial loan exposure across Districts, States, and River Basins to detect correlated cluster risks, tracking total capital at risk, high-risk ratios, and **Probable Maximum Loss (PML 1-in-100 yr)** to protect institutional solvency against regional natural disasters.
 
-#### D. UNEP FI (2026 Frameworks) & Basel Committee (BCBS) Pillar 3 Standards
-Aligned with the **UNEP FI Risk Centre** *“Conceptual Framework for Sustainability Risk Integration”* (July 2026) and the **Basel Committee on Banking Supervision (BCBS)** finalized *Climate-Related Financial Risks Framework* (June 2025 / 2026):
+#### D. Basel Committee (BCBS) Pillar 3 Standards (Template CRFR2)
+Aligned with the **Basel Committee on Banking Supervision (BCBS)** finalized *Climate-Related Financial Risks Framework* (June 2025 / 2026):
 * **BCBS Pillar 3 Template CRFR2 (Physical Risk)**: Formatted table reporting gross carrying amounts in hazard-prone areas categorized by peril family, maturity buckets ($\le 5\text{ yrs}$, $5-10\text{ yrs}$, $> 10\text{ yrs}$), and uninsured collateral protection gap.
 * **The 7 Core Prudential Elements**: Implements the July 2026 UNEP FI architecture spanning Risk Strategy, Governance, Hazard Identification, Materiality & Transmission, Taxonomy, Risk Appetite Framework (5 KRIs), and Action Monitoring.
 * **Solving the "Data Gap"**: Directly translates complex geospatial hazard rasters into standard banking credit metrics ($\Delta \text{PD}, \Delta \text{LGD}, \text{LTV}_{\text{stress}}, \Delta \text{ECL}$), overcoming the integration barrier faced by 50% of global banks.
@@ -269,20 +329,21 @@ Aligned with the **UNEP FI Risk Centre** *“Conceptual Framework for Sustainabi
 
 ## 🗺️ Geospatial Layer Architecture
 
-Climatrix includes multi-resolution basemaps accessible directly via the layer control:
+Climatrix includes multi-resolution basemaps accessible directly via the layer control, guaranteed 100% watermark-free without requiring third-party Carto API keys:
 
 ```
 [Layer Selector]
+  ├── Google Maps (Streets)            ← Modern street network & landmark navigation (Default)
   ├── Google Earth (Hybrid Satellite)  ← Centimeter-resolution aerial + road vector labels (Zoom 21)
   ├── Google Earth (Satellite Only)    ← Pure unannotated high-resolution satellite imagery
-  ├── Google Maps (Streets)            ← Modern street network & landmark navigation
-  ├── Google Maps (Terrain)            ← Shaded relief topography & contours
-  ├── Esri World Imagery               ← Global GIS satellite baseline
-  ├── Google Maps / Earth & Esri World  ← High-resolution satellite, vector street, & dark canvas basemaps
-  └── OpenTopoMap                      ← Detailed contours and trail networks
+  ├── Google Maps (Terrain)            ← Shaded relief topography & elevation contours
+  ├── Dark Canvas (Esri World Dark)    ← Clean institutional dark-mode financial basemap
+  ├── Satellite (Esri World Imagery)   ← Global GIS satellite baseline
+  ├── OpenStreetMap (Free)             ← Global crowdsourced street network
+  └── Topographic (OpenTopoMap)        ← Detailed contours and mountain trail networks
 ```
 
-* **Instant Marker Drop**: Marker position is rendered in **<16ms** on user click, eliminating legacy UI freeze while spatial hazard rasters decode in the background.
+* **Instant Sub-16ms Marker Drop**: Marker position is rendered in **<16ms** on user click, eliminating legacy UI freeze while spatial hazard rasters decode in the background.
 
 ---
 
@@ -294,9 +355,11 @@ Climatrix is pre-configured to generate audit-ready evidence for international b
 ┌─────────────────────────────────┬────────────────────────────────────────────────────────┐
 │ Regulatory Standard             │ How Climatrix Satisfies The Requirement                │
 ├─────────────────────────────────┼────────────────────────────────────────────────────────┤
+│ BCBS Pillar 3 (Template CRFR2)  │ Banking book gross carrying amounts by peril & maturity│
+│ UNEP FI Risk Centre 2026        │ 4-Pillars Strategy + 5 Board Risk Appetite KRIs        │
 │ TCFD (Governance & Risk)        │ 26 acute/chronic hazards + NGFS transition scenarios   │
 │ ISSB (IFRS S2 Climate)          │ Metric-level physical exposure + carbon shadow price   │
-│ BCBS (Basel Banking Guidelines) │ Loan maturity matching + 99.5% tail VaR capital buffer │
+│ IFRS 9 / CECL Credit Impairment │ Stressed PD/LGD migration & Climate ECL uplift         │
 │ RBI Draft Climate Framework     │ Granular district/state Indian banking loan portfolios │
 │ EU Taxonomy / CSRD (DNSH)       │ Explicit flood, heat, and drought vulnerability tests  │
 └─────────────────────────────────┴────────────────────────────────────────────────────────┘
@@ -349,6 +412,9 @@ npx tsx scripts/audit_geography.ts
 
 # Physical climate science invariance test (27 strict geophysical rules)
 npx tsx scripts/audit_climate_science.ts
+
+# Capture full-fidelity UI screenshots
+node scripts/take_screenshots.cjs
 
 # Production build compilation
 npm run build
