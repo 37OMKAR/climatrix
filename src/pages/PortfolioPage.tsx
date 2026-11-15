@@ -100,6 +100,10 @@ export const PortfolioPage: React.FC<{
             </label>
             <label className="flex items-center gap-2 min-h-[42px] px-3 rounded-[10px] bg-panel border border-line text-[13px] text-muted">Layer
               <select value={layer} onChange={(e) => setLayer(e.target.value as Layer)} className="bg-transparent text-ink font-medium outline-none">
+                <option value="google_hybrid">Google Earth (Hybrid Satellite)</option>
+                <option value="google_sat">Google Earth (Satellite Only)</option>
+                <option value="google_roads">Google Maps (Streets)</option>
+                <option value="google_terrain">Google Maps (Terrain)</option>
                 <option value="street">Street (Carto)</option>
                 <option value="osm">OpenStreetMap (Free)</option>
                 <option value="satellite">Satellite (Esri)</option>

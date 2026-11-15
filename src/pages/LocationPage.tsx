@@ -1,9 +1,9 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Search, Loader2, RefreshCw, MapPin, Plus } from 'lucide-react';
+import { Search, Loader2, RefreshCw, MapPin, Plus, Sun } from 'lucide-react';
 import { MapView, type Theme, type Layer } from '../ui/MapView';
 import { HazardTable } from '../ui/HazardTable';
 import { Card, Button, Field, inputCls, RatingChip, Bar, Stat, cx } from '../ui/kit';
-import { geocode, reverseGeocode, type Place } from '../data/api';
+import { geocode, reverseGeocode, fetchForecast3Day, type Place, type Forecast3Day } from '../data/api';
 import { getSite, summarise, losses, type SiteParams, type LossClass } from '../engine/assess';
 import { FAMILIES, HAZARDS, SCENARIOS, YEARS, RATING_COLOR, ratingOf, yearForMaturity, type Scenario, type Year } from '../engine/hazards';
 import { inr, num, parseInr } from '../lib/format';
@@ -23,7 +23,8 @@ export const LocationPage: React.FC<{
   const [progress, setProgress] = useState<{ step: string; done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fly, setFly] = useState<{ lat: number; lon: number; zoom?: number; seq: number } | null>(null);
-  const [layer, setLayer] = useState<Layer>('street');
+  const [layer, setLayer] = useState<Layer>('google_hybrid');
+  const [forecast, setForecast] = useState<Forecast3Day | null>(null);
   const [amount, setAmount] = useState('');
   const [tenure, setTenure] = useState('');
   const [cls, setCls] = useState<LossClass>('commercial');
@@ -47,8 +48,21 @@ export const LocationPage: React.FC<{
     abort.current?.abort();
     const ctl = new AbortController();
     abort.current = ctl;
-    setSite(null); setError(null); setProgress({ step: 'Starting', done: 0, total: 17 });
-    if (!label) reverseGeocode(lat, lon).then((p) => !ctl.signal.aborted && setPlace(p ?? { lat, lon, label: `${lat.toFixed(4)}, ${lon.toFixed(4)}`, precision: 'locality' }));
+    if (label) {
+      setPlace(label);
+    } else {
+      setPlace((prev) => (prev && prev.lat === lat && prev.lon === lon ? prev : { lat, lon, label: `${lat.toFixed(4)}°, ${lon.toFixed(4)}°`, precision: 'address' }));
+    }
+    setError(null);
+    setProgress({ step: 'Locating & computing', done: 0, total: 17 });
+    fetchForecast3Day(lat, lon, ctl.signal).then((f) => {
+      if (!ctl.signal.aborted && f) setForecast(f);
+    });
+    if (!label) {
+      reverseGeocode(lat, lon).then((p) => {
+        if (!ctl.signal.aborted && p) setPlace(p);
+      });
+    }
     try {
       const s = await getSite(lat, lon, (step, done, total) => setProgress({ step, done, total }), ctl.signal, force);
       if (!ctl.signal.aborted) setSite(s);
@@ -61,7 +75,11 @@ export const LocationPage: React.FC<{
     setFly({ lat: p.lat, lon: p.lon, zoom: p.precision === 'state' ? 7 : p.precision === 'district' ? 10 : 14, seq: Date.now() });
     analyse(p.lat, p.lon, p);
   };
-  const pick = (lat: number, lon: number) => { setPlace(null); setFly({ lat, lon, seq: Date.now() }); analyse(lat, lon, null); };
+  const pick = (lat: number, lon: number) => {
+    setPlace({ lat, lon, label: `${lat.toFixed(4)}°, ${lon.toFixed(4)}°`, precision: 'address' });
+    setFly({ lat, lon, seq: Date.now() });
+    analyse(lat, lon, null);
+  };
 
   const sum = useMemo(() => (site ? summarise(site, scenario, year) : null), [site, scenario, year]);
   const famMax = FAMILIES.map((f) => {
@@ -72,7 +90,13 @@ export const LocationPage: React.FC<{
   const ten = Number(tenure);
   const loanYear = ten > 0 ? yearForMaturity(new Date().getFullYear() + Math.ceil(ten / 12)) : year;
   const loss = site && amt > 0 ? losses(site, amt, cls, scenario, loanYear) : null;
-  const pins = place || site ? [{ id: 'here', lat: site?.lat ?? place!.lat, lon: site?.lon ?? place!.lon, color: sum?.rating ? RATING_COLOR[sum.rating] : 'var(--accent)', label: place?.label?.split(',')[0] ?? 'Selected point' }] : [];
+  const pins = place || site ? [{
+    id: 'here',
+    lat: place?.lat ?? site!.lat,
+    lon: place?.lon ?? site!.lon,
+    color: sum?.rating ? RATING_COLOR[sum.rating] : 'var(--accent)',
+    label: place?.label?.split(',')[0] ?? 'Selected point'
+  }] : [];
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-3 items-start">
@@ -94,6 +118,10 @@ export const LocationPage: React.FC<{
             </form>
             <label className="flex items-center gap-2 min-h-[42px] px-3 rounded-[10px] bg-panel border border-line text-[13px] text-muted">Layer
               <select value={layer} onChange={(e) => setLayer(e.target.value as Layer)} className="bg-transparent text-ink font-medium outline-none">
+                <option value="google_hybrid">Google Earth (Hybrid Satellite)</option>
+                <option value="google_sat">Google Earth (Satellite Only)</option>
+                <option value="google_roads">Google Maps (Streets)</option>
+                <option value="google_terrain">Google Maps (Terrain)</option>
                 <option value="street">Street (Carto)</option>
                 <option value="osm">OpenStreetMap (Free)</option>
                 <option value="satellite">Satellite (Esri)</option>
@@ -109,9 +137,37 @@ export const LocationPage: React.FC<{
             </label>
           </>} />
         <div className="flex items-center justify-between px-1 text-xs text-muted">
-          <span>⚡ Free Open-Data Engine · Zero API Key Required · Auto-fallback to CMIP6 baseline</span>
-          <span className="hidden sm:inline">Tiles: Leaflet + OpenStreetMap / Esri / Carto</span>
+          <span>⚡ Live Geospatial Hazard Engine · Auto-fallback to CMIP6 baseline</span>
+          <span className="hidden sm:inline">Tiles: Google Earth / Maps · Leaflet</span>
         </div>
+        {forecast && forecast.days.length > 0 && (
+          <div className="rounded-2xl p-4 bg-panel border border-line flex flex-col gap-3 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sun className="w-4 h-4 text-accent" />
+                <h3 className="text-sm font-bold">Operational Weather · Next 3 Days</h3>
+              </div>
+              <span className="text-xs text-muted">Live High-Resolution Forecast</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {forecast.days.map((d, i) => (
+                <div key={d.date} className="rounded-xl bg-chip/60 p-3 flex flex-col gap-1 border border-line/40">
+                  <div className="flex items-center justify-between text-xs text-muted">
+                    <span className="font-semibold text-ink">{i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : new Date(d.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                    <span className="tabular text-[11px]">{d.date.slice(5)}</span>
+                  </div>
+                  <div className="text-base sm:text-lg font-bold tabular mt-1 text-ink">
+                    {Math.round(d.tmax)}°C <span className="text-xs font-normal text-muted">/ {Math.round(d.tmin)}°C</span>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between text-[11px] text-muted mt-1 gap-1">
+                    <span>🌧️ {d.precip > 0 ? `${d.precip.toFixed(1)} mm` : '0 mm'}</span>
+                    <span>💨 {Math.round(d.windMax)} km/h</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {!site && !progress && !error && (
           <p className="text-[13px] text-muted px-1">Search an address or click anywhere on the map. All hazard values are computed live from open datasets with automatic physical science fallback.</p>
         )}

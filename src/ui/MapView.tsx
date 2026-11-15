@@ -4,11 +4,46 @@ import { Maximize2, Minimize2 } from 'lucide-react';
 
 export type Pin = { id: string; lat: number; lon: number; color: string; label: string; sub?: string };
 export type Theme = 'light' | 'dark' | 'ocean';
-export type Layer = 'street' | 'osm' | 'satellite' | 'dark' | 'topo' | 'mapbox' | 'mapbox_sat';
+export type Layer =
+  | 'google_hybrid'
+  | 'google_sat'
+  | 'google_roads'
+  | 'google_terrain'
+  | 'street'
+  | 'osm'
+  | 'satellite'
+  | 'dark'
+  | 'topo'
+  | 'mapbox'
+  | 'mapbox_sat';
 
 const mapboxToken = ((import.meta as { env?: Record<string, string> }).env?.VITE_MAPBOX_TOKEN ?? '').trim();
 
-const TILES: Record<string, { url: string; attr: string; subdomains?: string }> = {
+const TILES: Record<string, { url: string; attr: string; subdomains?: string; maxZoom?: number }> = {
+  google_hybrid: {
+    url: 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+    attr: '&copy; Google Maps & Earth',
+    subdomains: '0123',
+    maxZoom: 21,
+  },
+  google_sat: {
+    url: 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+    attr: '&copy; Google Earth Imagery',
+    subdomains: '0123',
+    maxZoom: 21,
+  },
+  google_roads: {
+    url: 'https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+    attr: '&copy; Google Maps',
+    subdomains: '0123',
+    maxZoom: 21,
+  },
+  google_terrain: {
+    url: 'https://mt{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
+    attr: '&copy; Google Terrain',
+    subdomains: '0123',
+    maxZoom: 21,
+  },
   osm: {
     url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     attr: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -104,7 +139,7 @@ export const MapView: React.FC<{
     tile.current?.remove();
     const tl = L.tileLayer(t.url, {
       attribution: t.attr,
-      maxZoom: 19,
+      maxZoom: t.maxZoom ?? 19,
       subdomains: t.subdomains || 'abc',
     });
     // Fallback to OpenStreetMap if primary tile server is blocked or errors
@@ -140,7 +175,14 @@ export const MapView: React.FC<{
   }, [fitKey]);
 
   useEffect(() => {
-    if (flyTo && map.current) map.current.flyTo([flyTo.lat, flyTo.lon], flyTo.zoom ?? 13, { duration: 1.2 });
+    if (!flyTo || !map.current) return;
+    const m = map.current;
+    const isVisible = m.getBounds().pad(-0.05).contains([flyTo.lat, flyTo.lon]);
+    if (isVisible && (flyTo.zoom === undefined || flyTo.zoom === m.getZoom())) {
+      m.panTo([flyTo.lat, flyTo.lon], { animate: true, duration: 0.25 });
+    } else {
+      m.flyTo([flyTo.lat, flyTo.lon], flyTo.zoom ?? 13, { duration: 0.6 });
+    }
   }, [flyTo]);
 
   useEffect(() => {

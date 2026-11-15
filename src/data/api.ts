@@ -37,7 +37,7 @@ export function setOpenMeteoKey(k: string) {
 const om = (host: string) => (apiKey ? `https://customer-${host}` : `https://${host}`);
 const withKey = (u: string) => (apiKey ? `${u}&apikey=${encodeURIComponent(apiKey)}` : u);
 
-async function getJson<T>(url: string, signal?: AbortSignal, timeoutMs = 45000): Promise<T> {
+async function getJson<T>(url: string, signal?: AbortSignal, timeoutMs = 15000): Promise<T> {
   let last: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     const ctl = new AbortController();
@@ -51,7 +51,7 @@ async function getJson<T>(url: string, signal?: AbortSignal, timeoutMs = 45000):
     } catch (e) {
       last = e;
       if (signal?.aborted || String(e).includes('429')) break;
-      await new Promise((res) => setTimeout(res, 800));
+      await new Promise((res) => setTimeout(res, 500));
     } finally {
       clearTimeout(t);
     }
@@ -63,21 +63,60 @@ export type Daily = { time: string[]; [k: string]: Array<number | null> | string
 
 export async function fetchElevations(pts: Array<[number, number]>, signal?: AbortSignal): Promise<number[]> {
   const u = `${om('api.open-meteo.com')}/v1/elevation?latitude=${pts.map((p) => p[0].toFixed(5)).join(',')}&longitude=${pts.map((p) => p[1].toFixed(5)).join(',')}`;
-  const j = await getJson<{ elevation: number[] }>(withKey(u), signal);
+  const j = await getJson<{ elevation: number[] }>(withKey(u), signal, 10000);
   return j.elevation;
 }
 
 export async function fetchEra5(lat: number, lon: number, signal?: AbortSignal): Promise<Daily> {
-  const u = `${om('archive-api.open-meteo.com')}/v1/archive?latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}&start_date=1981-01-01&end_date=2024-12-31&models=era5&timezone=GMT` +
+  const u = `${om('archive-api.open-meteo.com')}/v1/archive?latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}&start_date=1981-01-01&end_date=2024-12-31&models=era5_land,era5&timezone=GMT` +
     '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_gusts_10m_max,snowfall_sum';
-  return (await getJson<{ daily: Daily }>(withKey(u), signal, 90000)).daily;
+  return (await getJson<{ daily: Daily }>(withKey(u), signal, 15000)).daily;
 }
 
 export const CMIP_MODELS = ['EC_Earth3P_HR', 'MRI_AGCM3_2_S'] as const;
 export async function fetchCmip6(lat: number, lon: number, signal?: AbortSignal): Promise<Daily> {
   const u = `${om('climate-api.open-meteo.com')}/v1/climate?latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}&start_date=1995-01-01&end_date=2049-12-31` +
     `&models=${CMIP_MODELS.join(',')}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,relative_humidity_2m_min,relative_humidity_2m_mean,wind_speed_10m_mean,wind_speed_10m_max,soil_moisture_0_to_10cm_mean`;
-  return (await getJson<{ daily: Daily }>(withKey(u), signal, 90000)).daily;
+  return (await getJson<{ daily: Daily }>(withKey(u), signal, 15000)).daily;
+}
+
+export type Forecast3Day = {
+  days: Array<{
+    date: string;
+    tmax: number;
+    tmin: number;
+    precip: number;
+    windMax: number;
+    weatherCode: number;
+  }>;
+};
+
+export async function fetchForecast3Day(lat: number, lon: number, signal?: AbortSignal): Promise<Forecast3Day | null> {
+  try {
+    const u = `${om('api.open-meteo.com')}/v1/forecast?latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max&forecast_days=3&timezone=auto`;
+    const j = await getJson<{
+      daily: {
+        time: string[];
+        weather_code: number[];
+        temperature_2m_max: number[];
+        temperature_2m_min: number[];
+        precipitation_sum: number[];
+        wind_speed_10m_max: number[];
+      };
+    }>(withKey(u), signal, 8000);
+    const d = j.daily;
+    const days = d.time.map((date, i) => ({
+      date,
+      weatherCode: d.weather_code[i] ?? 0,
+      tmax: d.temperature_2m_max[i] ?? 0,
+      tmin: d.temperature_2m_min[i] ?? 0,
+      precip: d.precipitation_sum[i] ?? 0,
+      windMax: d.wind_speed_10m_max[i] ?? 0,
+    }));
+    return { days };
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchGlofas(lat: number, lon: number, signal?: AbortSignal): Promise<Daily> {
