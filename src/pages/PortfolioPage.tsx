@@ -450,6 +450,8 @@ export const PortfolioPage: React.FC<{
                 </tbody>
               </table>
             </div>
+          )}
+
           {/* VIEW 5: Basel Committee (BCBS) Pillar 3 Template CRFR2 Physical Risk (2025/2026 Standards) */}
           {view === 'bcbs_crfr2' && (
             <div className="overflow-x-auto max-h-[560px]">
