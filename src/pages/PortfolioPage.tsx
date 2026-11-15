@@ -100,11 +100,17 @@ export const PortfolioPage: React.FC<{
             </label>
             <label className="flex items-center gap-2 min-h-[42px] px-3 rounded-[10px] bg-panel border border-line text-[13px] text-muted">Layer
               <select value={layer} onChange={(e) => setLayer(e.target.value as Layer)} className="bg-transparent text-ink font-medium outline-none">
-                <option value="street">Street</option>
+                <option value="street">Street (Carto)</option>
                 <option value="osm">OpenStreetMap (Free)</option>
-                <option value="satellite">Satellite</option>
-                <option value="dark">Dark</option>
-                <option value="topo">Topographic</option>
+                <option value="satellite">Satellite (Esri)</option>
+                <option value="dark">Dark Matter (Carto)</option>
+                <option value="topo">Topographic (OpenTopoMap)</option>
+                {((import.meta as { env?: Record<string, string> }).env?.VITE_MAPBOX_TOKEN) && (
+                  <>
+                    <option value="mapbox">Mapbox Streets</option>
+                    <option value="mapbox_sat">Mapbox Satellite</option>
+                  </>
+                )}
               </select>
             </label>
           </>} />

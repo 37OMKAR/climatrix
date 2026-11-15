@@ -99,6 +99,12 @@ export const LocationPage: React.FC<{
                 <option value="satellite">Satellite (Esri)</option>
                 <option value="dark">Dark Matter (Carto)</option>
                 <option value="topo">Topographic (OpenTopoMap)</option>
+                {((import.meta as { env?: Record<string, string> }).env?.VITE_MAPBOX_TOKEN) && (
+                  <>
+                    <option value="mapbox">Mapbox Streets</option>
+                    <option value="mapbox_sat">Mapbox Satellite</option>
+                  </>
+                )}
               </select>
             </label>
           </>} />

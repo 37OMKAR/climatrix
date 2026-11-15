@@ -49,7 +49,10 @@ const NX = 720, NY = 360, CH = 600, RES = 1200; // 600×600 chunks of a 1/1200°
 let sas: { token: string; until: number } | null = null;
 async function sasToken(signal?: AbortSignal) {
   if (sas && Date.now() < sas.until) return sas.token;
-  const r = await fetch('https://planetarycomputer.microsoft.com/api/sas/v1/token/deltaresfloodssa/floods', { signal });
+  const headers: Record<string, string> = {};
+  const pcKey = ((import.meta as { env?: Record<string, string> }).env?.VITE_PLANETARY_COMPUTER_KEY ?? '').trim();
+  if (pcKey) headers['Ocp-Apim-Subscription-Key'] = pcKey;
+  const r = await fetch('https://planetarycomputer.microsoft.com/api/sas/v1/token/deltaresfloodssa/floods', { headers, signal });
   if (!r.ok) throw new Error(`Planetary Computer token HTTP ${r.status}`);
   const j = (await r.json()) as { token: string; 'msft:expiry': string };
   sas = { token: j.token, until: Date.parse(j['msft:expiry']) - 5 * 60e3 };

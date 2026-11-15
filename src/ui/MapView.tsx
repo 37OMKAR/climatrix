@@ -4,7 +4,9 @@ import { Maximize2, Minimize2 } from 'lucide-react';
 
 export type Pin = { id: string; lat: number; lon: number; color: string; label: string; sub?: string };
 export type Theme = 'light' | 'dark' | 'ocean';
-export type Layer = 'street' | 'osm' | 'satellite' | 'dark' | 'topo';
+export type Layer = 'street' | 'osm' | 'satellite' | 'dark' | 'topo' | 'mapbox' | 'mapbox_sat';
+
+const mapboxToken = ((import.meta as { env?: Record<string, string> }).env?.VITE_MAPBOX_TOKEN ?? '').trim();
 
 const TILES: Record<string, { url: string; attr: string; subdomains?: string }> = {
   osm: {
@@ -30,6 +32,16 @@ const TILES: Record<string, { url: string; attr: string; subdomains?: string }> 
     attr: '&copy; OpenTopoMap &copy; OpenStreetMap contributors',
     subdomains: 'abc',
   },
+  ...(mapboxToken ? {
+    mapbox: {
+      url: `https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/{z}/{x}/{y}?access_token=${mapboxToken}`,
+      attr: '&copy; <a href="https://www.mapbox.com/">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
+    },
+    mapbox_sat: {
+      url: `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/{z}/{x}/{y}?access_token=${mapboxToken}`,
+      attr: '&copy; <a href="https://www.mapbox.com/">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
+    },
+  } : {}),
 };
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);

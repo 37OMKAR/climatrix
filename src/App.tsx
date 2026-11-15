@@ -17,7 +17,8 @@ const LS = { settings: 'climaris:settings:v1', loans: 'climaris:loans:v1' };
 const load = <T,>(k: string, d: T): T => { try { const v = localStorage.getItem(k); return v ? { ...d, ...JSON.parse(v) } : d; } catch { return d; } };
 
 export default function App() {
-  const init = load(LS.settings, { theme: 'light' as Theme, scenario: 'ssp245' as Scenario, year: 2050 as Year, horizon: 'maturity' as 'maturity' | 'fixed', apiKey: '', ngfs: 'NZ' as NgfsScenario, fx: DEFAULT_FX as FxSettings });
+  const envKey = ((import.meta as { env?: Record<string, string> }).env?.VITE_OPEN_METEO_API_KEY ?? '').trim();
+  const init = load(LS.settings, { theme: 'light' as Theme, scenario: 'ssp245' as Scenario, year: 2050 as Year, horizon: 'maturity' as 'maturity' | 'fixed', apiKey: envKey, ngfs: 'NZ' as NgfsScenario, fx: DEFAULT_FX as FxSettings });
   const [page, setPage] = useState<Page>('location');
   const [theme, setTheme] = useState<Theme>(init.theme);
   const [scenario, setScenario] = useState<Scenario>(init.scenario);

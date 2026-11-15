@@ -29,10 +29,10 @@ export const SOURCES = {
 } as const;
 export type SourceId = keyof typeof SOURCES;
 
-let apiKey = '';
+let apiKey = ((import.meta as { env?: Record<string, string> }).env?.VITE_OPEN_METEO_API_KEY ?? '').trim();
 /** Optional Open-Meteo commercial key: switches to the customer- hosts with higher limits. */
 export function setOpenMeteoKey(k: string) {
-  apiKey = k.trim();
+  apiKey = k.trim() || ((import.meta as { env?: Record<string, string> }).env?.VITE_OPEN_METEO_API_KEY ?? '').trim();
 }
 const om = (host: string) => (apiKey ? `https://customer-${host}` : `https://${host}`);
 const withKey = (u: string) => (apiKey ? `${u}&apikey=${encodeURIComponent(apiKey)}` : u);
