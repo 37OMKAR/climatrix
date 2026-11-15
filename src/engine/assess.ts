@@ -821,7 +821,9 @@ export function hazardAt(site: SiteParams, id: HazardId, s: Scenario, y: Year): 
       value = slr;
       const hw = Number.isFinite(tide) ? tide : 0;
       score = coastKm > 30 ? 0 : elev < hw + slr ? 85 : elev < hw + slr + 2 ? 60 : elev < 5 ? 40 : elev < 10 ? 20 : 3;
-      extra = coastKm > 30 ? 'More than 30 km from the coast' : `Ground ${elev.toFixed(1)} m above mean sea level`;
+      extra = coastKm > 30
+        ? 'More than 30 km from the coast'
+        : `Ground ${elev.toFixed(1)} m above MSL · Permanent baseline rise: +${(slr * 100).toFixed(0)} cm by ${y} (cyclone storm surges & high tides scored under Coastal Flood)`;
       break;
     }
     case 'river_flood': {
