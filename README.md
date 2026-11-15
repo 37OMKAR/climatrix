@@ -242,7 +242,7 @@ Climatrix includes multi-resolution basemaps accessible directly via the layer c
   ├── Google Maps (Streets)            ← Modern street network & landmark navigation
   ├── Google Maps (Terrain)            ← Shaded relief topography & contours
   ├── Esri World Imagery               ← Global GIS satellite baseline
-  ├── Carto Voyager / Dark Matter      ← High-contrast thematic basemaps
+  ├── Google Maps / Earth & Esri World  ← High-resolution satellite, vector street, & dark canvas basemaps
   └── OpenTopoMap                      ← Detailed contours and trail networks
 ```
 

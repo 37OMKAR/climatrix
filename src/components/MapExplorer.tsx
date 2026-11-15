@@ -87,11 +87,24 @@ const OVERLAYS: Record<Exclude<OverlayId, 'none'>, { label: string; color: strin
   },
 };
 
-const TILES: Record<BasemapStyle, { url: string; attribution: string }> = {
-  dark: { url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', attribution: '&copy; CARTO &copy; OpenStreetMap' },
-  satellite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: 'Tiles &copy; Esri' },
-  streets: { url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', attribution: '&copy; CARTO &copy; OpenStreetMap' },
-  osm: { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '&copy; OpenStreetMap contributors' },
+const TILES: Record<BasemapStyle, { url: string; attribution: string; subdomains?: string }> = {
+  dark: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri, DeLorme, NAVTEQ',
+  },
+  satellite: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; Esri, Maxar',
+  },
+  streets: {
+    url: 'https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+    attribution: '&copy; Google Maps',
+    subdomains: '0123',
+  },
+  osm: {
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; OpenStreetMap contributors',
+  },
 };
 
 export const MapExplorer: React.FC<MapExplorerProps> = ({
@@ -193,7 +206,8 @@ export const MapExplorer: React.FC<MapExplorerProps> = ({
     const map = mapRef.current;
     if (!map) return;
     tileRef.current?.remove();
-    const tl = L.tileLayer(TILES[basemap].url, { attribution: TILES[basemap].attribution, maxZoom: 19, subdomains: 'abcd' });
+    const t = TILES[basemap];
+    const tl = L.tileLayer(t.url, { attribution: t.attribution, maxZoom: 19, subdomains: t.subdomains || 'abc' });
     tl.on('tileerror', () => {
       tl.setUrl('https://tile.openstreetmap.org/{z}/{x}/{y}.png');
     });

@@ -122,10 +122,9 @@ export const LocationPage: React.FC<{
                 <option value="google_sat">Google Earth (Satellite Only)</option>
                 <option value="google_roads">Google Maps (Streets)</option>
                 <option value="google_terrain">Google Maps (Terrain)</option>
-                <option value="street">Street (Carto)</option>
                 <option value="osm">OpenStreetMap (Free)</option>
-                <option value="satellite">Satellite (Esri)</option>
-                <option value="dark">Dark Matter (Carto)</option>
+                <option value="satellite">Satellite (Esri World Imagery)</option>
+                <option value="dark">Dark Canvas (Esri World Dark)</option>
                 <option value="topo">Topographic (OpenTopoMap)</option>
                 {((import.meta as { env?: Record<string, string> }).env?.VITE_MAPBOX_TOKEN) && (
                   <>
