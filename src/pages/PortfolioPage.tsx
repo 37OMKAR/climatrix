@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Search, Download, Loader2, Trash2, ShieldAlert, Layers, CheckCircle2, AlertTriangle, ArrowUpRight } from 'lucide-react';
+import { Search, Download, Loader2, Trash2, ShieldAlert, Layers, CheckCircle2, AlertTriangle, ArrowUpRight, FileText } from 'lucide-react';
 import { MapView, type Theme, type Layer } from '../ui/MapView';
 import { Card, Tabs, Button, RatingChip, Bar, cx } from '../ui/kit';
 import { HazardTable } from '../ui/HazardTable';
@@ -29,7 +29,7 @@ export const PortfolioPage: React.FC<{
   onUpload: () => void; onClear: () => void; onRetry: () => void; ngfs: NgfsScenario; setNgfs: (s: NgfsScenario) => void; fx: FxSettings;
 }> = ({ theme, loans, sites, scenario, year, horizon, setHorizon, run, onUpload, onClear, onRetry, ngfs, setNgfs, fx }) => {
   const [tab, setTab] = useState<'all' | 'high' | 'long' | 'issues'>('all');
-  const [view, setView] = useState<'loans' | 'accumulation' | 'four_pillars' | 'credit_risk'>('loans');
+  const [view, setView] = useState<'loans' | 'accumulation' | 'four_pillars' | 'credit_risk' | 'bcbs_crfr2'>('loans');
   const [q, setQ] = useState('');
   const [sel, setSel] = useState<string | null>(null);
   const [colour, setColour] = useState<'rating' | 'hazard'>('rating');
@@ -121,6 +121,39 @@ export const PortfolioPage: React.FC<{
   const transferRepaymentCover = rows.reduce((t, r) => t + (r.credit?.repaymentHolidayInr || 0), 0);
 
   const thisYear = new Date().getFullYear();
+
+  // Basel Committee (BCBS) Pillar 3 Template CRFR2 Physical Risk Table (June 2025 / 2026 Standards)
+  const crfr2Rows = useMemo(() => {
+    return FAMILIES.map((fam) => {
+      const matching = rows.filter((r) =>
+        r.sum?.values.some((v) => v.status === 'ok' && HAZARD[v.id].family === fam.id)
+      );
+      const highMatching = rows.filter((r) =>
+        r.sum?.values.some((v) => v.status === 'ok' && v.score >= 60 && HAZARD[v.id].family === fam.id)
+      );
+      const totalAmt = matching.reduce((t, r) => t + r.amount, 0);
+      const highAmt = highMatching.reduce((t, r) => t + r.amount, 0);
+
+      // Maturity breakdown for high risk loans
+      const under5 = highMatching.filter((r) => r.maturityYear <= thisYear + 5).reduce((t, r) => t + r.amount, 0);
+      const fiveToTen = highMatching.filter((r) => r.maturityYear > thisYear + 5 && r.maturityYear <= thisYear + 10).reduce((t, r) => t + r.amount, 0);
+      const overTen = highMatching.filter((r) => r.maturityYear > thisYear + 10).reduce((t, r) => t + r.amount, 0);
+
+      // Uninsured / Protection gap (loans where damage100 > 0.2 of amount or underwater)
+      const uninsuredGap = highMatching.filter((r) => (r.credit?.damageRatio100 || 0) > 0.25 || r.credit?.isUnderwater).reduce((t, r) => t + r.amount, 0);
+
+      return {
+        family: fam,
+        totalAmt,
+        highAmt,
+        pctOfTotal: exposure > 0 ? (highAmt / exposure) * 100 : 0,
+        under5,
+        fiveToTen,
+        overTen,
+        uninsuredGap,
+      };
+    });
+  }, [rows, exposure, thisYear]);
   const filtered = rows.filter((r) => {
     if (tab === 'high' && !(r.sum && r.sum.maxScore >= 60)) return false;
     if (tab === 'long' && !(r.maturityYear > 2035)) return false;
@@ -229,6 +262,9 @@ export const PortfolioPage: React.FC<{
               </button>
               <button onClick={() => setView('credit_risk')} className={cx('px-2.5 py-1.5 rounded-lg transition-colors', view === 'credit_risk' ? 'bg-panel text-ink shadow-sm' : 'text-muted hover:text-ink')}>
                 Credit & IFRS 9 ECL
+              </button>
+              <button onClick={() => setView('bcbs_crfr2')} className={cx('px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5', view === 'bcbs_crfr2' ? 'bg-panel text-ink shadow-sm' : 'text-muted hover:text-ink')}>
+                <FileText className="w-3.5 h-3.5" />BCBS Pillar 3 (CRFR2)
               </button>
             </div>
             <div className="ml-auto flex items-center gap-2">
@@ -411,6 +447,45 @@ export const PortfolioPage: React.FC<{
                       </tr>
                     );
                   })}
+                </tbody>
+              </table>
+            </div>
+          {/* VIEW 5: Basel Committee (BCBS) Pillar 3 Template CRFR2 Physical Risk (2025/2026 Standards) */}
+          {view === 'bcbs_crfr2' && (
+            <div className="overflow-x-auto max-h-[560px]">
+              <div className="p-3 bg-chip/50 border-b border-line text-xs flex flex-wrap items-center justify-between gap-2">
+                <span><b>Basel Committee (BCBS) Pillar 3 · Template CRFR2:</b> Banking book gross carrying amount in geographical areas prone to acute and chronic physical climate risk.</span>
+                <span className="font-semibold text-accent">Total Carrying Amount: {inr(exposure)}</span>
+              </div>
+              <table className="w-full text-[13px] min-w-[1000px]">
+                <thead className="sticky top-0 bg-chip"><tr className="text-left text-xs text-muted">
+                  <th className="py-2.5 pl-4 pr-2 font-medium">Physical Hazard Category</th>
+                  <th className="py-2.5 px-2 font-medium text-right">Gross Carrying Amount</th>
+                  <th className="py-2.5 px-2 font-medium text-right">High/Severe Intensity</th>
+                  <th className="py-2.5 px-2 font-medium text-right">% of Total Book</th>
+                  <th className="py-2.5 px-2 font-medium text-right">Maturity &le; 5 yrs</th>
+                  <th className="py-2.5 px-2 font-medium text-right">Maturity 5–10 yrs</th>
+                  <th className="py-2.5 px-2 font-medium text-right">Maturity &gt; 10 yrs</th>
+                  <th className="py-2.5 pl-2 pr-4 font-medium text-right">Uninsured Protection Gap</th>
+                </tr></thead>
+                <tbody>
+                  {crfr2Rows.map((row) => (
+                    <tr key={row.family.id} className="border-t border-line hover:bg-chip/60">
+                      <td className="py-3 pl-4 pr-2 font-semibold text-ink flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: row.family.color }} />
+                        {row.family.name}
+                      </td>
+                      <td className="py-3 px-2 text-right tabular font-medium">{inr(row.totalAmt)}</td>
+                      <td className="py-3 px-2 text-right tabular font-semibold text-[#dc2626]">{inr(row.highAmt)}</td>
+                      <td className="py-3 px-2 text-right tabular font-medium">{row.pctOfTotal.toFixed(1)}%</td>
+                      <td className="py-3 px-2 text-right tabular text-muted">{inr(row.under5)}</td>
+                      <td className="py-3 px-2 text-right tabular text-muted">{inr(row.fiveToTen)}</td>
+                      <td className="py-3 px-2 text-right tabular text-muted">{inr(row.overTen)}</td>
+                      <td className="py-3 pl-2 pr-4 text-right tabular font-semibold text-[#dc2626]">
+                        {row.uninsuredGap > 0 ? inr(row.uninsuredGap) : '₹0'}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

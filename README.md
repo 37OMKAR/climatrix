@@ -259,6 +259,12 @@ Directly operationalizes the methodologies from ***"Managing physical climate-re
 #### C. Munich Re Accumulation Monitoring
 Aggregates spatial loan exposure across Districts, States, and River Basins to detect correlated cluster risks, tracking total capital at risk, high-risk ratios, and **Probable Maximum Loss (PML 1-in-100 yr)** to protect institutional solvency.
 
+#### D. UNEP FI (2026 Frameworks) & Basel Committee (BCBS) Pillar 3 Standards
+Aligned with the **UNEP FI Risk Centre** *“Conceptual Framework for Sustainability Risk Integration”* (July 2026) and the **Basel Committee on Banking Supervision (BCBS)** finalized *Climate-Related Financial Risks Framework* (June 2025 / 2026):
+* **BCBS Pillar 3 Template CRFR2 (Physical Risk)**: Formatted table reporting gross carrying amounts in hazard-prone areas categorized by peril family, maturity buckets ($\le 5\text{ yrs}$, $5-10\text{ yrs}$, $> 10\text{ yrs}$), and uninsured collateral protection gap.
+* **The 7 Core Prudential Elements**: Implements the July 2026 UNEP FI architecture spanning Risk Strategy, Governance, Hazard Identification, Materiality & Transmission, Taxonomy, Risk Appetite Framework (5 KRIs), and Action Monitoring.
+* **Solving the "Data Gap"**: Directly translates complex geospatial hazard rasters into standard banking credit metrics ($\Delta \text{PD}, \Delta \text{LGD}, \text{LTV}_{\text{stress}}, \Delta \text{ECL}$), overcoming the integration barrier faced by 50% of global banks.
+
 ---
 
 ## 🗺️ Geospatial Layer Architecture

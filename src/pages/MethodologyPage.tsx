@@ -57,12 +57,12 @@ export const MethodologyPage: React.FC<{ apiKey: string; onApiKey: (k: string) =
           <Button kind="primary" onClick={() => { const r = Number(rate); if (r > 0) onFx({ usdInr: r, asOf }); }}>Save rate</Button>
         </div>
       </Card>
-      <Card title="UNEP FI & Munich Re Banking Framework (May 2024)">
+      <Card title="UNEP FI (2024 & 2026 Frameworks) & Basel Committee Pillar 3 Standards">
         <div className="flex flex-col gap-2.5 text-sm leading-relaxed">
           <p>
-            Implements the operational methodologies from <i>“Managing physical climate-related risks in loan portfolios: Technical Supplement to the 2024 Climate Risk Landscape Report”</i>, published jointly by the <b>United Nations Environment Programme Finance Initiative (UNEP FI)</b> and <b>Munich Re</b> (May 2024).
+            Implements operational methodologies from the landmark <b>UNEP FI & Munich Re</b> <i>“Managing physical climate-related risks in loan portfolios”</i> (May 2024), the <b>UNEP FI Risk Centre</b> <i>“Conceptual Framework for Sustainability Risk Integration”</i> (July 2026), and the <b>Basel Committee on Banking Supervision (BCBS)</b> <i>Pillar 3 Climate-Related Financial Risks Framework</i> (June 2025 / 2026):
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
             <div className="p-3 rounded-xl bg-chip/60 border border-line flex flex-col gap-1.5">
               <span className="font-bold text-xs uppercase tracking-wider text-accent">1. The 4-Pillars Strategy Engine</span>
               <ul className="text-xs space-y-1 list-disc list-inside text-muted">
@@ -81,10 +81,15 @@ export const MethodologyPage: React.FC<{ apiKey: string; onApiKey: (k: string) =
                 <li><b className="text-ink">IFRS 9 ECL Uplift:</b> ΔECL = (PD_stress × LGD_stress - PD_base × LGD_base) × EAD.</li>
               </ul>
             </div>
+            <div className="p-3 rounded-xl bg-chip/60 border border-line flex flex-col gap-1.5">
+              <span className="font-bold text-xs uppercase tracking-wider text-accent">3. BCBS Pillar 3 & UNEP FI 2026</span>
+              <ul className="text-xs space-y-1 list-disc list-inside text-muted">
+                <li><b className="text-ink">Template CRFR2:</b> Regulatory reporting of gross carrying amounts in hazard-prone areas across maturity bands (&le;5y, 5–10y, &gt;10y).</li>
+                <li><b className="text-ink">7-Core Elements:</b> Directly embeds UNEP FI’s 2026 architecture (Strategy, Governance, Identification, Materiality, Taxonomy, Appetite, Action).</li>
+                <li><b className="text-ink">Accumulation Monitoring:</b> Aggregates exposure by District / Regional Cluster to track Probable Maximum Loss (PML 1-in-100 yr).</li>
+              </ul>
+            </div>
           </div>
-          <p className="text-xs text-muted mt-1">
-            <b>Accumulation Monitoring:</b> Aggregates exposure by District / Regional Cluster to identify peril hotspots and Probable Maximum Loss (PML), preventing correlated solvency shocks in line with Munich Re’s Location Risk Intelligence standards.
-          </p>
         </div>
       </Card>
       <Card title="Known limitations">
