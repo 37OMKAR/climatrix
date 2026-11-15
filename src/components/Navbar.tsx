@@ -1,29 +1,34 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Globe2,
-  Sliders,
-  Calendar,
-  Layers,
   Upload,
   PlusCircle,
-  FileSpreadsheet,
-  Download,
   Building2,
   Landmark,
   GitCompare,
-  BarChart3,
   MapPin,
   ChevronDown,
-  Info,
   BookOpen,
   LayoutDashboard,
-  Cpu,
-  ShieldAlert,
-  Sparkles,
+  FileText,
+  Check,
+  FolderOpen,
+  Plus,
+  Info,
 } from 'lucide-react';
-import { Decade, ReturnPeriod, SpatialResolution, SSPScenario } from '../types/climate';
-import { SSP_SCENARIOS, SPATIAL_RESOLUTIONS } from '../services/climateEngine';
-import { SAMPLE_PORTFOLIOS } from '../services/sampleData';
+import { Decade, ReturnPeriod, SSPScenario } from '../types/climate';
+import { SSP_SCENARIOS, formatCurrencyUsd, ALL_ASSET_TYPES } from '../services/climateEngine';
+import { Segmented, Button, cx } from './ui';
+
+export type AppTab = 'dashboard' | 'map' | 'reporting' | 'sovereigns' | 'corporate';
+
+export interface PortfolioOption {
+  id: string;
+  name: string;
+  description?: string;
+  assetCount: number;
+  totalValueUsd: number;
+}
 
 interface NavbarProps {
   currentScenario: SSPScenario;
@@ -32,378 +37,280 @@ interface NavbarProps {
   onDecadeChange: (decade: Decade) => void;
   currentReturnPeriod: ReturnPeriod;
   onReturnPeriodChange: (rp: ReturnPeriod) => void;
-  currentResolution?: SpatialResolution;
-  onResolutionChange?: (resolution: SpatialResolution) => void;
-  activePortfolioId?: string;
-  activeTab: 'dashboard' | 'map' | 'sovereigns' | 'corporate';
-  onTabChange: (tab: 'dashboard' | 'map' | 'sovereigns' | 'corporate') => void;
+  showControls?: boolean;
+  activeTab: AppTab;
+  onTabChange: (tab: AppTab) => void;
+  portfolios: PortfolioOption[];
+  activePortfolioId: string;
+  activePortfolioName: string;
+  onSelectPortfolio: (portfolioId: string) => void;
   onOpenUpload: () => void;
   onOpenAddAsset: () => void;
-  onOpenTaxonomy?: () => void;
+  onOpenTaxonomy: () => void;
   onOpenReport: () => void;
   onOpenCompare: () => void;
-  onLoadSamplePortfolio: (portfolioId: string) => void;
+  onOpenMethods: () => void;
   onExportCsv: () => void;
   totalAssets: number;
+  totalValueUsd: number;
 }
 
 const DECADES: Decade[] = [2025, 2030, 2040, 2050, 2060, 2070, 2080, 2090];
-const RETURN_PERIODS: { id: ReturnPeriod; label: string; tooltip: string }[] = [
-  { id: 'aal', label: 'AAL', tooltip: 'Average Annual Loss (Expected annual severity)' },
-  { id: '10yr', label: '10-Yr', tooltip: '1-in-10 Year Event (10% Annual Exceedance Probability)' },
-  { id: '50yr', label: '50-Yr', tooltip: '1-in-50 Year Event (2% Annual Exceedance Probability)' },
-  { id: '100yr', label: '100-Yr', tooltip: '1-in-100 Year Event (1% Annual Exceedance Probability)' },
-  { id: '250yr', label: '250-Yr', tooltip: '1-in-250 Year Event (0.4% Annual Exceedance Probability)' },
-  { id: '500yr', label: '500-Yr', tooltip: '1-in-500 Year Event (0.2% Tail Risk)' },
+export const RETURN_PERIOD_OPTIONS: { id: ReturnPeriod; label: string; tooltip: string }[] = [
+  { id: 'aal', label: 'Avg year', tooltip: 'Average Annual Loss — the long-run yearly average' },
+  { id: '10yr', label: '1-in-10', tooltip: '1-in-10 year event (10% chance each year)' },
+  { id: '50yr', label: '1-in-50', tooltip: '1-in-50 year event (2% chance each year)' },
+  { id: '100yr', label: '1-in-100', tooltip: '1-in-100 year event (1% chance each year)' },
+  { id: '250yr', label: '1-in-250', tooltip: '1-in-250 year event (0.4% chance each year)' },
+  { id: '500yr', label: '1-in-500', tooltip: '1-in-500 year event (0.2% chance each year)' },
 ];
 
-export const Navbar: React.FC<NavbarProps> = ({
-  currentScenario,
-  onScenarioChange,
-  currentDecade,
-  onDecadeChange,
-  currentReturnPeriod,
-  onReturnPeriodChange,
-  currentResolution = '1km',
-  onResolutionChange,
-  activePortfolioId = 'global-flagship',
-  activeTab,
-  onTabChange,
-  onOpenUpload,
-  onOpenAddAsset,
-  onOpenTaxonomy,
-  onOpenReport,
-  onOpenCompare,
-  onLoadSamplePortfolio,
-  onExportCsv,
-  totalAssets,
-}) => {
-  const [sampleMenuOpen, setSampleMenuOpen] = useState(false);
-  const activePortfolio = SAMPLE_PORTFOLIOS.find((p) => p.id === activePortfolioId) || SAMPLE_PORTFOLIOS[0];
+const TABS: { id: AppTab; label: string; icon: React.ReactNode }[] = [
+  { id: 'dashboard', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
+  { id: 'map', label: 'Map', icon: <MapPin className="w-4 h-4" /> },
+  { id: 'reporting', label: 'Reporting', icon: <FileText className="w-4 h-4" /> },
+  { id: 'sovereigns', label: 'Countries', icon: <Landmark className="w-4 h-4" /> },
+  { id: 'corporate', label: 'Companies', icon: <Building2 className="w-4 h-4" /> },
+];
+
+function useClickOutside(ref: React.RefObject<HTMLElement | null>, onOutside: () => void, active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onOutside();
+    };
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && onOutside();
+    document.addEventListener('mousedown', h);
+    document.addEventListener('keydown', k);
+    return () => {
+      document.removeEventListener('mousedown', h);
+      document.removeEventListener('keydown', k);
+    };
+  }, [ref, onOutside, active]);
+}
+
+const Label: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500 mr-2 whitespace-nowrap hidden lg:inline">{children}</span>
+);
+
+export const Navbar: React.FC<NavbarProps> = (p) => {
+  const [portfolioOpen, setPortfolioOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const portfolioRef = useRef<HTMLDivElement>(null);
+  const addRef = useRef<HTMLDivElement>(null);
+  useClickOutside(portfolioRef, () => setPortfolioOpen(false), portfolioOpen);
+  useClickOutside(addRef, () => setAddOpen(false), addOpen);
+
+  const scenario = SSP_SCENARIOS[p.currentScenario];
 
   return (
-    <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 text-slate-100 shadow-xl">
-      {/* Top Banner: Brand, Navigation Tabs, Portfolio Switcher, and Quick Actions */}
-      <div className="max-w-[1780px] mx-auto px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3">
-        {/* Logo and Brand */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-700 shadow-lg shadow-cyan-500/20 border border-cyan-400/30">
-            <Globe2 className="w-6 h-6 text-white animate-spin-slow" />
+    <header className="sticky top-0 z-[500] border-b border-white/[0.06] bg-[#0b1020]/85 backdrop-blur-xl no-print">
+      {/* Row 1: brand, tabs, actions */}
+      <div className="mx-auto max-w-[1600px] px-4 sm:px-6 h-14 flex items-center gap-4">
+        <div className="flex items-center gap-2.5 shrink-0">
+          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-400 to-indigo-500 flex items-center justify-center">
+            <Globe2 className="w-[18px] h-[18px] text-slate-950" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-black tracking-tight text-white flex items-center gap-1.5 font-mono">
-                CLIMA<span className="text-cyan-400">RISK</span> <span className="text-xs px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-sans font-semibold">AI v4.9</span>
-              </span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-medium hidden sm:inline-flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                CMIP6 AR6 & HighResMIP
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 leading-none mt-0.5 hidden md:block">
-              Absolute Physical Climate Risk Analytics • 12 Hazards • 9M+ Asset Locations • TCFD / CSRD / SEC
-            </p>
+          <div className="leading-tight">
+            <div className="text-[15px] font-semibold text-white tracking-tight">ClimaRisk</div>
           </div>
         </div>
 
-        {/* Center: Module View Tabs */}
-        <nav className="flex items-center bg-slate-950/80 p-1 rounded-xl border border-slate-800/80">
-          <button
-            onClick={() => onTabChange('dashboard')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'dashboard'
-                ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
-          >
-            <LayoutDashboard className="w-3.5 h-3.5" />
-            <span>Terminal Dashboard</span>
-          </button>
-
-          <button
-            onClick={() => onTabChange('map')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'map'
-                ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
-          >
-            <MapPin className="w-3.5 h-3.5" />
-            <span>Full Map ({totalAssets})</span>
-          </button>
-
-          <button
-            onClick={() => onTabChange('sovereigns')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'sovereigns'
-                ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
-          >
-            <Landmark className="w-3.5 h-3.5" />
-            <span>Sovereigns (200+)</span>
-          </button>
-
-          <button
-            onClick={() => onTabChange('corporate')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'corporate'
-                ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
-          >
-            <Building2 className="w-3.5 h-3.5" />
-            <span>850k Entities</span>
-          </button>
+        <nav className="hidden md:flex items-center gap-0 lg:gap-0.5 min-w-0 flex-1 overflow-x-auto" aria-label="Main">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => p.onTabChange(t.id)}
+              aria-current={p.activeTab === t.id ? 'page' : undefined}
+              title={t.label}
+              aria-label={t.label}
+              className={cx(
+                'flex items-center gap-1.5 lg:gap-2 rounded-lg px-2 lg:px-3 py-1.5 text-sm transition-colors whitespace-nowrap',
+                p.activeTab === t.id ? 'bg-white/[0.08] text-white' : 'text-slate-400 hover:text-white hover:bg-white/[0.04]',
+              )}
+            >
+              {t.icon}
+              <span className="hidden md:inline text-xs lg:text-sm">{t.label}</span>
+            </button>
+          ))}
         </nav>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-2">
-          {/* Active Institutional Portfolio Dropdown */}
-          <div className="relative">
+        <div className="ml-auto flex items-center gap-2">
+          {/* Portfolio switcher */}
+          <div className="relative" ref={portfolioRef}>
             <button
-              onClick={() => setSampleMenuOpen(!sampleMenuOpen)}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 transition"
-              title="Switch Active Institutional Portfolio"
+              onClick={() => setPortfolioOpen((v) => !v)}
+              aria-expanded={portfolioOpen}
+              className="flex items-center gap-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] ring-1 ring-inset ring-white/[0.06] px-3 py-1.5 text-sm text-slate-100 max-w-[44px] lg:max-w-[280px]"
             >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-cyan-400" />
-              <div className="text-left hidden sm:block">
-                <span className="font-semibold text-white truncate max-w-[150px] inline-block">{activePortfolio?.name || 'Portfolio'}</span>
-              </div>
-              <span className="text-[10px] font-mono text-cyan-300 bg-cyan-950 px-1.5 py-0.5 rounded border border-cyan-800">
-                {activePortfolio?.totalCapitalUsd || `${totalAssets} assets`}
+              <FolderOpen className="w-4 h-4 text-cyan-300 shrink-0" />
+              <span className="truncate hidden lg:inline">{p.activePortfolioName}</span>
+              <span className="text-xs text-slate-400 tabular-nums shrink-0 hidden lg:inline">
+                {p.totalAssets} · {formatCurrencyUsd(p.totalValueUsd)}
               </span>
-              <ChevronDown className="w-3 h-3 text-slate-400" />
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0 hidden lg:block" />
             </button>
-
-            {sampleMenuOpen && (
-              <div
-                className="absolute right-0 mt-2 w-96 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95"
-                onMouseLeave={() => setSampleMenuOpen(false)}
-              >
-                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 px-3 py-1.5 uppercase tracking-wider border-b border-slate-800 mb-1">
-                  <span>5 Institutional Portfolios ($338B+)</span>
-                  <span className="text-cyan-400 font-mono">54 Real Facilities</span>
-                </div>
-                {SAMPLE_PORTFOLIOS.map((p) => {
-                  const isCurrent = activePortfolioId === p.id;
+            {portfolioOpen && (
+              <div className="absolute right-0 mt-2 w-[380px] rounded-2xl border border-white/[0.08] bg-slate-900 p-1.5 shadow-2xl pop-in">
+                <div className="px-3 pt-2 pb-1.5 text-[11px] uppercase tracking-wide text-slate-500">Portfolios</div>
+                {p.portfolios.map((pf) => {
+                  const active = pf.id === p.activePortfolioId;
                   return (
                     <button
-                      key={p.id}
+                      key={pf.id}
                       onClick={() => {
-                        onLoadSamplePortfolio(p.id);
-                        setSampleMenuOpen(false);
+                        p.onSelectPortfolio(pf.id);
+                        setPortfolioOpen(false);
                       }}
-                      className={`w-full text-left px-3 py-2 rounded-lg transition group ${
-                        isCurrent ? 'bg-cyan-950/60 border border-cyan-800/60' : 'hover:bg-slate-800'
-                      }`}
+                      className={cx('w-full text-left rounded-xl px-3 py-2 flex items-start gap-2.5 transition-colors', active ? 'bg-cyan-500/10' : 'hover:bg-white/[0.04]')}
                     >
-                      <div className="text-xs font-semibold text-slate-100 group-hover:text-cyan-400 flex items-center justify-between">
-                        <span className="flex items-center gap-1.5">
-                          {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />}
-                          {p.name}
-                        </span>
-                        <div className="flex items-center gap-1.5 font-mono">
-                          <span className="text-emerald-400 text-[11px] font-bold">{p.totalCapitalUsd}</span>
-                          <span className="text-[10px] text-slate-400">({p.assetCount})</span>
+                      <Check className={cx('w-4 h-4 mt-0.5 shrink-0', active ? 'text-cyan-300' : 'text-transparent')} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm text-white truncate">{pf.name}</span>
+                          <span className="text-xs text-slate-400 tabular-nums shrink-0">
+                            {pf.assetCount} · {formatCurrencyUsd(pf.totalValueUsd)}
+                          </span>
                         </div>
-                      </div>
-                      <div className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
-                        {p.description}
+                        {pf.description && <div className="text-xs text-slate-500 truncate mt-0.5">{pf.description}</div>}
                       </div>
                     </button>
                   );
                 })}
+                <div className="border-t border-white/[0.06] mt-1.5 pt-1.5">
+                  <button
+                    onClick={() => {
+                      setPortfolioOpen(false);
+                      p.onOpenUpload();
+                    }}
+                    className="w-full text-left rounded-xl px-3 py-2 text-sm text-cyan-300 hover:bg-white/[0.04] flex items-center gap-2.5"
+                  >
+                    <Upload className="w-4 h-4" /> Import your own CSV…
+                  </button>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Upload Button */}
-          <button
-            onClick={onOpenUpload}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white shadow-md shadow-cyan-600/30 transition cursor-pointer"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Upload CSV</span>
-          </button>
-
-          {/* Add Single Asset Button */}
-          <button
-            onClick={onOpenAddAsset}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
-            title="Add Single Facility with Auto DEM Elevation"
-          >
-            <PlusCircle className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden md:inline">Add Asset</span>
-          </button>
-
-          {/* Scenario Compare Button */}
-          <button
-            onClick={onOpenCompare}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
-            title="Side-by-side SSP Scenario Modeling"
-          >
-            <GitCompare className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden lg:inline">Compare Scenarios</span>
-          </button>
-
-          {/* Taxonomy Catalog Button */}
-          {onOpenTaxonomy && (
-            <button
-              onClick={onOpenTaxonomy}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
-              title="Explore >250 Asset Taxonomy Classifications & Damage Functions"
-            >
-              <BookOpen className="w-3.5 h-3.5 text-purple-400" />
-              <span className="hidden xl:inline">&gt;250 Taxonomy</span>
-            </button>
-          )}
-
-          {/* TCFD / CSRD / SEC Report Button */}
-          <button
-            onClick={onOpenReport}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md shadow-emerald-600/20 transition cursor-pointer"
-            title="Generate Universal TCFD / CSRD / SEC Regulatory Disclosure Dossier"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Regulatory Dossier</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Climate Parameters Bar: Scenario, Spatial Downscaling Resolution, Decade, Return Period */}
-      <div className="bg-slate-950/90 border-t border-slate-800/80 px-4 sm:px-6 py-2">
-        <div className="max-w-[1780px] mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
-          {/* SSP Scenario Selector (with NGFS Phase IV crosswalk) */}
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium flex items-center gap-1">
-              <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-              <span>SSP Scenario:</span>
-            </span>
-            <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
-              {(Object.keys(SSP_SCENARIOS) as SSPScenario[]).map((scKey) => {
-                const sc = SSP_SCENARIOS[scKey];
-                const isSelected = currentScenario === scKey;
-                return (
+          {/* Add menu */}
+          <div className="relative" ref={addRef}>
+            <Button variant="secondary" size="sm" icon={<Plus className="w-4 h-4" />} onClick={() => setAddOpen((v) => !v)} aria-expanded={addOpen}>
+              <span className="hidden sm:inline">Add</span>
+            </Button>
+            {addOpen && (
+              <div className="absolute right-0 mt-2 w-64 rounded-2xl border border-white/[0.08] bg-slate-900 p-1.5 shadow-2xl pop-in">
+                {[
+                  { icon: <PlusCircle className="w-4 h-4 text-emerald-300" />, label: 'Add a site', sub: 'By coordinates or city preset', fn: p.onOpenAddAsset },
+                  { icon: <Upload className="w-4 h-4 text-cyan-300" />, label: 'Import CSV', sub: 'Replace or append a portfolio', fn: p.onOpenUpload },
+                  { icon: <BookOpen className="w-4 h-4 text-violet-300" />, label: 'Browse asset types', sub: `${ALL_ASSET_TYPES.length} asset types with damage profiles`, fn: p.onOpenTaxonomy },
+                ].map((it) => (
                   <button
-                    key={scKey}
-                    onClick={() => onScenarioChange(scKey)}
-                    title={`${sc.name} (${sc.co2Trajectory}) • NGFS Equivalent: ${sc.ngfsEquivalent}`}
-                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition flex items-center gap-1.5 ${
-                      isSelected
-                        ? 'bg-slate-800 text-white border border-slate-700 shadow-sm'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-                    }`}
+                    key={it.label}
+                    onClick={() => {
+                      setAddOpen(false);
+                      it.fn();
+                    }}
+                    className="w-full text-left rounded-xl px-3 py-2 hover:bg-white/[0.04] flex items-start gap-2.5"
                   >
-                    <span
-                      className="w-2 h-2 rounded-full"
-                      style={{ backgroundColor: sc.color }}
-                    />
-                    <span>{sc.code}</span>
-                    <span className="text-[10px] text-slate-400 font-mono font-normal hidden xl:inline">
-                      {sc.warming2100}
+                    <span className="mt-0.5">{it.icon}</span>
+                    <span>
+                      <span className="block text-sm text-white">{it.label}</span>
+                      <span className="block text-xs text-slate-500">{it.sub}</span>
                     </span>
                   </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Spatial Downscaling Resolution Selector */}
-          {onResolutionChange && (
-            <div className="flex items-center gap-2">
-              <span className="text-slate-400 font-medium flex items-center gap-1">
-                <Cpu className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Spatial Downscaling:</span>
-              </span>
-              <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800">
-                {(['25km', '10km', '1km', '90m'] as SpatialResolution[]).map((resKey) => {
-                  const meta = SPATIAL_RESOLUTIONS[resKey];
-                  const isSelected = currentResolution === resKey;
-                  return (
-                    <button
-                      key={resKey}
-                      onClick={() => onResolutionChange(resKey)}
-                      title={`${meta.name} • ${meta.provider}\nMethod: ${meta.methodology}\nUncertainty: ±${meta.uncertaintyBandPercent}%`}
-                      className={`px-2.5 py-1 rounded-md text-xs font-mono font-medium transition flex items-center gap-1 ${
-                        isSelected
-                          ? 'bg-emerald-600 text-white font-bold shadow-sm'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-                      }`}
-                    >
-                      <span>{resKey}</span>
-                      <span className="text-[9px] opacity-75 font-sans hidden 2xl:inline">
-                        (±{meta.uncertaintyBandPercent}%)
-                      </span>
-                    </button>
-                  );
-                })}
+                ))}
               </div>
-            </div>
-          )}
-
-          {/* Decade Horizon Selector */}
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5 text-amber-400" />
-              <span>Decade Horizon:</span>
-            </span>
-            <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800 overflow-x-auto">
-              {DECADES.map((d) => {
-                const isSelected = currentDecade === d;
-                return (
-                  <button
-                    key={d}
-                    onClick={() => onDecadeChange(d)}
-                    className={`px-2.5 py-1 rounded-md text-xs font-mono font-medium transition ${
-                      isSelected
-                        ? 'bg-cyan-600 text-white font-bold shadow-sm'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-                    }`}
-                  >
-                    {d === 2025 ? 'Today' : `${d}s`}
-                  </button>
-                );
-              })}
-            </div>
+            )}
           </div>
 
-          {/* Return Period Exceedance Probability Selector */}
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium flex items-center gap-1">
-              <Layers className="w-3.5 h-3.5 text-purple-400" />
-              <span>Return Period:</span>
-            </span>
-            <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800">
-              {RETURN_PERIODS.map((rp) => {
-                const isSelected = currentReturnPeriod === rp.id;
-                return (
-                  <button
-                    key={rp.id}
-                    onClick={() => onReturnPeriodChange(rp.id)}
-                    title={rp.tooltip}
-                    className={`px-2.5 py-1 rounded-md text-xs font-mono font-medium transition ${
-                      isSelected
-                        ? 'bg-purple-600 text-white font-bold shadow-sm'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-                    }`}
-                  >
-                    {rp.label}
-                  </button>
-                );
-              })}
-            </div>
-            <button
-              onClick={onExportCsv}
-              className="text-slate-400 hover:text-cyan-400 p-1 transition"
-              title="Download Full Portfolio Risk Table (CSV)"
-            >
-              <Download className="w-4 h-4" />
-            </button>
-          </div>
+          <Button variant="primary" size="sm" icon={<FileText className="w-4 h-4" />} onClick={p.onOpenReport}>
+            <span className="hidden lg:inline">Report</span>
+          </Button>
         </div>
       </div>
+
+      {/* Mobile tabs (below md) */}
+      <nav className="md:hidden grid grid-cols-5 border-t border-white/[0.04]" aria-label="Main">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => p.onTabChange(t.id)}
+            aria-current={p.activeTab === t.id ? 'page' : undefined}
+            className={cx('flex flex-col items-center gap-0.5 py-1.5 text-[11px]', p.activeTab === t.id ? 'text-white' : 'text-slate-400')}
+          >
+            {t.icon}
+            {t.label}
+          </button>
+        ))}
+      </nav>
+
+      {/* Row 2: model controls (hidden on reference-data tabs) */}
+      {p.showControls === false ? (
+        <div className="border-t border-white/[0.04]">
+          <div className="mx-auto max-w-[1600px] px-4 sm:px-6 py-2.5 text-xs text-slate-400">
+            Reference data (around 2050, middle-of-the-road warming). Not affected by the scenario, year and event size controls.
+          </div>
+        </div>
+      ) : (
+      <div className="border-t border-white/[0.04]">
+        <div className="mx-auto max-w-[1600px] px-4 sm:px-6 py-2 flex flex-wrap items-center gap-x-5 gap-y-2">
+          <div className="relative flex items-center min-w-0 max-w-full overflow-x-auto">
+            <Label>Scenario</Label>
+            <Segmented
+              size="sm"
+              ariaLabel="Emissions scenario"
+              value={p.currentScenario}
+              onChange={p.onScenarioChange}
+              options={(Object.keys(SSP_SCENARIOS) as SSPScenario[]).map((k) => ({
+                value: k,
+                dot: SSP_SCENARIOS[k].color,
+                label: (
+                  <>
+                    {SSP_SCENARIOS[k].code}
+                    <span className="opacity-60 hidden 2xl:inline">{SSP_SCENARIOS[k].warming2100}</span>
+                  </>
+                ),
+                title: `${SSP_SCENARIOS[k].name} · ${SSP_SCENARIOS[k].warming2100} by 2100 · NGFS: ${SSP_SCENARIOS[k].ngfsEquivalent}`,
+              }))}
+            />
+          </div>
+
+          <div className="relative flex items-center min-w-0 max-w-full overflow-x-auto">
+            <Label>Year</Label>
+            <Segmented
+              size="sm"
+              ariaLabel="Projection decade"
+              value={p.currentDecade}
+              onChange={p.onDecadeChange}
+              options={DECADES.map((d) => ({ value: d, label: d === 2025 ? 'Now' : `’${String(d).slice(2)}`, title: d === 2025 ? 'Today' : `${d}s` }))}
+            />
+          </div>
+
+          <div className="relative flex items-center min-w-0 max-w-full overflow-x-auto">
+            <Label>Event size</Label>
+            <Segmented
+              size="sm"
+              ariaLabel="Return period"
+              value={p.currentReturnPeriod}
+              onChange={p.onReturnPeriodChange}
+              options={RETURN_PERIOD_OPTIONS.map((r) => ({ value: r.id, label: r.label, title: r.tooltip }))}
+            />
+          </div>
+
+          <div className="ml-auto flex items-center gap-1 shrink-0">
+            <Button variant="ghost" size="sm" icon={<GitCompare className="w-4 h-4" />} onClick={p.onOpenCompare} title="Compare all five scenarios side by side">
+              <span className="hidden xl:inline">Compare</span>
+            </Button>
+            <Button variant="ghost" size="sm" icon={<Info className="w-4 h-4" />} onClick={p.onOpenMethods} title="Hazards, data sources and how scores are calculated">
+              <span className="hidden xl:inline">How it works</span>
+            </Button>
+          </div>
+        </div>
+        <div className="sr-only" aria-live="polite">
+          Showing {scenario.code}, {p.currentDecade}
+        </div>
+      </div>
+      )}
     </header>
   );
 };
-

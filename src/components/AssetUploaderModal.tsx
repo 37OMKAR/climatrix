@@ -1,323 +1,195 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Papa from 'papaparse';
-import { Asset, AssetCategory } from '../types/climate';
+import { Asset } from '../types/climate';
+import { rowsToAssets } from '../services/csvImport';
 import { SAMPLE_PORTFOLIOS } from '../services/sampleData';
-import { estimateGlobalElevationMeters, reverseGeocodeLocation } from '../services/climateEngine';
-import {
-  Upload,
-  FileSpreadsheet,
-  CheckCircle2,
-  AlertCircle,
-  X,
-  Download,
-  Database,
-  ArrowRight,
-  Sparkles,
-} from 'lucide-react';
+import { formatCurrencyUsd } from '../services/climateEngine';
+import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, X, Download } from 'lucide-react';
+import { ModalShell, Button, Segmented, cx } from './ui';
 
 interface AssetUploaderModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onUploadAssets: (assets: Asset[]) => void;
+  onUploadAssets: (assets: Asset[], mode: 'replace' | 'append') => void;
   onLoadSamplePortfolio: (portfolioId: string) => void;
+  currentAssetCount?: number;
 }
 
-export const AssetUploaderModal: React.FC<AssetUploaderModalProps> = ({
-  isOpen,
-  onClose,
-  onUploadAssets,
-  onLoadSamplePortfolio,
-}) => {
-  const [parsedRows, setParsedRows] = useState<any[]>([]);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
-  const [isValidating, setIsValidating] = useState(false);
+const TEMPLATE =
+  'Asset Name,Entity Name,Parent Entity,Asset Type,Category,Latitude,Longitude,Replacement Value,City,Country,Elevation\n' +
+  '"Ashburn AI Data Center 1","Cloud Services LLC","Tech Holdings","Hyperscale Cloud Data Center (>50MW)","Data Center & Telecom",39.0438,-77.4874,2500000000,"Ashburn","United States",88\n' +
+  '"Port of Rotterdam Berth 4","Euro Container Terminals","State of Netherlands","Deepwater Container Port Terminal","Maritime Port & Shipping",51.9566,4.0287,4200000000,"Rotterdam","Netherlands",4.5\n' +
+  '"Sonoran Solar Array 300MW","SunPower Grid Corp","Energy Capital","Utility-Scale Solar PV Farm (>100MW)","Renewable Energy & Power",33.4484,-112.0740,650000000,"Phoenix","United States",330\n' +
+  '"Miami Biscayne Tower","Coastal REIT Capital","Real Estate Partners","High-Rise Grade-A Office Tower (>30 floors)","Commercial Real Estate",25.7667,-80.1936,1100000000,"Miami","United States",2.4\n';
+
+export const AssetUploaderModal: React.FC<AssetUploaderModalProps> = ({ isOpen, onClose, onUploadAssets, onLoadSamplePortfolio, currentAssetCount = 0 }) => {
+  const [parsed, setParsed] = useState<Asset[]>([]);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [mode, setMode] = useState<'replace' | 'append'>('append');
+  const [assumed, setAssumed] = useState<Record<string, string[]>>({});
+  const [dragging, setDragging] = useState(false);
+
+  // Reset when reopened
+  useEffect(() => {
+    if (isOpen) {
+      setParsed([]);
+      setErrors([]);
+      setWarnings([]);
+      setFileName(null);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleFile = (file: File | undefined) => {
     if (!file) return;
-
     setFileName(file.name);
-    setIsValidating(true);
-    setValidationErrors([]);
-
-    Papa.parse(file, {
+    setBusy(true);
+    setErrors([]);
+    setWarnings([]);
+    Papa.parse<Record<string, unknown>>(file, {
       header: true,
-      skipEmptyLines: true,
-      dynamicTyping: true,
-      complete: (results) => {
-        validateAndSetData(results.data);
-        setIsValidating(false);
+      skipEmptyLines: 'greedy',
+      complete: (res) => {
+        const out = rowsToAssets(res.data);
+        setParsed(out.assets);
+        setErrors(out.errors);
+        setWarnings(out.warnings);
+        setAssumed(out.assumed);
+        setBusy(false);
       },
-      error: (error) => {
-        setValidationErrors([`CSV Parsing error: ${error.message}`]);
-        setIsValidating(false);
+      error: (err) => {
+        setErrors([`Could not read the file: ${err.message}`]);
+        setBusy(false);
       },
     });
   };
 
-  const validateAndSetData = (data: any[]) => {
-    const errors: string[] = [];
-    const validAssets: Asset[] = [];
-
-    if (!Array.isArray(data) || data.length === 0) {
-      setValidationErrors(['The uploaded file contains no data rows.']);
-      return;
-    }
-
-    data.forEach((row, index) => {
-      const rowNum = index + 2; // header is row 1
-      // Header normalization
-      const name = row.name || row.Name || row['Asset Name'] || row.asset_name || `Asset ${index + 1}`;
-      const entity = row.entity || row.Entity || row['Entity Name'] || row.Company || 'Corporate Portfolio';
-      const parent = row.parent || row.Parent || row['Parent Entity'] || entity;
-      const assetType = row.asset_type || row.AssetType || row.Type || row.type || 'Commercial Real Estate';
-      const category = (row.category || row.Category || 'Industrial & Logistics') as AssetCategory;
-      const lat = parseFloat(row.lat || row.Lat || row.latitude || row.Latitude);
-      const lon = parseFloat(row.lon || row.Lon || row.longitude || row.Longitude || row.lng || row.Lng);
-      const value = parseFloat(row.value || row.Value || row.replacement_value || row['Replacement Value'] || 10000000);
-      const year = parseInt(row.year_built || row.year || 2018, 10);
-
-      if (isNaN(lat) || lat < -90 || lat > 90) {
-        errors.push(`Row ${rowNum} (${name}): Invalid Latitude "${row.latitude || row.lat}". Must be between -90 and 90.`);
-        return;
-      }
-      if (isNaN(lon) || lon < -180 || lon > 180) {
-        errors.push(`Row ${rowNum} (${name}): Invalid Longitude "${row.longitude || row.lon}". Must be between -180 and 180.`);
-        return;
-      }
-
-      // Automatically determine location and elevation if omitted or blank
-      const geo = reverseGeocodeLocation(lat, lon);
-      const city = row.city || row.City || geo.city;
-      const country = row.country || row.Country || geo.country;
-
-      const rawElev = row.elevation || row.Elevation || row['Elevation (m)'];
-      const parsedElev = rawElev !== undefined && rawElev !== '' ? parseFloat(rawElev) : NaN;
-      const elevation = !isNaN(parsedElev) ? parsedElev : estimateGlobalElevationMeters(lat, lon);
-
-      validAssets.push({
-        id: `uploaded-${Date.now()}-${index}`,
-        name: String(name),
-        entityName: String(entity),
-        parentEntity: String(parent),
-        assetType: String(assetType),
-        category,
-        latitude: lat,
-        longitude: lon,
-        city: String(city),
-        country: String(country),
-        replacementValueUsd: isNaN(value) ? 50000000 : value,
-        yearBuilt: isNaN(year) ? 2018 : year,
-        elevationMeters: elevation,
-        criticalityTier: 1,
-      });
-    });
-
-    setValidationErrors(errors);
-    setParsedRows(validAssets);
-  };
-
-  const handleConfirmUpload = () => {
-    if (parsedRows.length > 0) {
-      onUploadAssets(parsedRows);
-      onClose();
-    }
-  };
-
-  const downloadSampleTemplate = () => {
-    const csvContent =
-      'Asset Name,Entity Name,Parent Entity,Asset Type,Category,Latitude,Longitude,Replacement Value,City,Country,Elevation\n' +
-      '"Ashburn AI Data Center 1","Cloud Services LLC","Tech Holdings","Hyperscale Cloud Data Center (>50MW)","Data Center & Telecom",39.0438,-77.4874,2500000000,"Ashburn","United States",88\n' +
-      '"Port of Rotterdam Berth 4","Euro Container Terminals","State of Netherlands","Deepwater Container Port Terminal","Maritime Port & Shipping",51.9566,4.0287,4200000000,"Rotterdam","Netherlands",4.5\n' +
-      '"Sonoran Solar Array 300MW","SunPower Grid Corp","Energy Capital","Utility-Scale Solar PV Farm (>100MW)","Renewable Energy & Power",33.4484,-112.0740,650000000,"Phoenix","United States",330\n' +
-      '"Taipei Silicon Foundry Fab 9","Global Microchips","Semiconductor Group","Semiconductor Fabrication Plant (Fab 300mm/200mm)","High-Tech & Semiconductor",23.1025,120.2858,8200000000,"Tainan","Taiwan",14\n' +
-      '"Miami Biscayne Tower","Coastal REIT Capital","Real Estate Partners","High-Rise Grade-A Office Tower (>30 floors)","Commercial Real Estate",25.7667,-80.1936,1100000000,"Miami","United States",2.4\n';
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'ClimaRisk_Asset_Upload_Template.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const downloadTemplate = () => {
+    const url = URL.createObjectURL(new Blob([TEMPLATE], { type: 'text/csv;charset=utf-8;' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ClimaRisk_import_template.csv';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-4xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 text-slate-100 flex flex-col max-h-[92vh]">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-800 bg-slate-950/90 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-cyan-950 border border-cyan-800 flex items-center justify-center text-cyan-400">
-              <Upload className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-white tracking-tight">
-                Upload Asset Portfolio & Model Physical Risk
-              </h2>
-              <p className="text-xs text-slate-400">
-                Ingest CSV / Excel with lat/lon coordinates for instant CMIP6 SSP physical risk assessment
-              </p>
-            </div>
-          </div>
+    <ModalShell onClose={onClose} maxWidth="max-w-3xl" labelledBy="upload-title">
+      <div className="px-6 py-4 border-b border-white/[0.06] flex items-center justify-between">
+        <div>
+          <h2 id="upload-title" className="text-base font-semibold text-white">Import sites</h2>
+          <p className="text-xs text-slate-400 mt-0.5">CSV with one row per site. Only latitude and longitude are required.</p>
+        </div>
+        <button onClick={onClose} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06]" aria-label="Close">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
 
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
+      <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <label
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files?.[0]); }}
+          className={cx('block rounded-2xl border-2 border-dashed p-8 text-center cursor-pointer transition-colors', dragging ? 'border-cyan-400 bg-cyan-400/[0.06]' : 'border-white/[0.1] hover:border-cyan-400/60 bg-white/[0.02]')}
+        >
+          <input type="file" accept=".csv,text/csv" className="sr-only" onChange={(e) => handleFile(e.target.files?.[0])} />
+          <FileSpreadsheet className="w-8 h-8 text-cyan-300 mx-auto" />
+          <div className="mt-3 text-sm text-white">Drop a CSV here or <span className="text-cyan-300 underline">browse</span></div>
+          <div className="mt-1 text-xs text-slate-500">Recognised columns: name, latitude, longitude, value, asset type, category, city, country, elevation</div>
+        </label>
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Button size="sm" variant="ghost" icon={<Download className="w-4 h-4" />} onClick={downloadTemplate}>Download template</Button>
+          {currentAssetCount > 0 && (
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              When importing
+              <Segmented size="sm" value={mode} onChange={setMode} options={[{ value: 'append', label: `Keep my ${currentAssetCount} sites` }, { value: 'replace', label: 'Replace them' }]} />
+            </div>
+          )}
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Upload Drop Zone */}
-          <div className="border-2 border-dashed border-slate-700 hover:border-cyan-500 rounded-2xl p-8 text-center bg-slate-950/50 hover:bg-slate-950 transition cursor-pointer relative group">
-            <input
-              type="file"
-              accept=".csv,text/csv,application/vnd.ms-excel"
-              onChange={handleFileUpload}
-              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-            />
-            <div className="flex flex-col items-center justify-center gap-3">
-              <div className="w-14 h-14 rounded-2xl bg-cyan-950/80 border border-cyan-800 flex items-center justify-center text-cyan-400 group-hover:scale-110 transition-transform">
-                <FileSpreadsheet className="w-7 h-7" />
-              </div>
-              <div>
-                <span className="text-sm font-bold text-white">
-                  Drop your CSV file here or <span className="text-cyan-400 underline">browse</span>
-                </span>
-                <p className="text-xs text-slate-400 mt-1">
-                  Required columns: <code className="text-cyan-300">Name</code>, <code className="text-cyan-300">Latitude</code>, <code className="text-cyan-300">Longitude</code>, <code className="text-cyan-300">Asset Type</code>, <code className="text-cyan-300">Replacement Value</code>
-                </p>
-              </div>
-            </div>
-          </div>
+        {busy && <div className="text-xs text-cyan-300">Reading {fileName}…</div>}
 
-          {/* Action Row: Template Download & Pre-loaded Portfolios */}
-          <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-slate-950/70 border border-slate-800">
-            <div className="flex items-center gap-2">
-              <Database className="w-4 h-4 text-cyan-400" />
-              <span className="text-xs font-semibold text-slate-300">Need a sample structure?</span>
-            </div>
-            <button
-              onClick={downloadSampleTemplate}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-cyan-300 border border-slate-700 transition"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Download CSV Template (.csv)</span>
-            </button>
+        {errors.length > 0 && (
+          <div className="rounded-xl bg-red-500/[0.08] ring-1 ring-red-400/30 p-4 text-xs text-red-200 space-y-1">
+            <div className="font-medium flex items-center gap-1.5"><AlertCircle className="w-4 h-4" /> {errors.length} row{errors.length === 1 ? '' : 's'} skipped</div>
+            {errors.slice(0, 5).map((e) => <div key={e} className="text-red-200/80">{e}</div>)}
+            {errors.length > 5 && <div className="text-red-200/60">…and {errors.length - 5} more</div>}
           </div>
+        )}
+        {warnings.length > 0 && (
+          <div className="rounded-xl bg-amber-500/[0.06] ring-1 ring-amber-400/25 p-3 text-xs text-amber-200 space-y-0.5">
+            {warnings.slice(0, 4).map((w) => <div key={w}>{w}</div>)}
+            {warnings.length > 4 && <div className="text-amber-200/60">…and {warnings.length - 4} more</div>}
+          </div>
+        )}
 
-          {/* Instant Sample Portfolios */}
+        {parsed.length > 0 && (
           <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono mb-2 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Or Load a Benchmark Institutional Portfolio (1-Click)</span>
+            <div className="text-sm text-emerald-300 flex items-center gap-1.5 mb-2">
+              <CheckCircle2 className="w-4 h-4" /> {parsed.length} site{parsed.length === 1 ? '' : 's'} ready from {fileName}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-              {SAMPLE_PORTFOLIOS.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => {
-                    onLoadSamplePortfolio(p.id);
-                    onClose();
-                  }}
-                  className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-cyan-500 hover:bg-slate-800/50 text-left transition group"
-                >
-                  <div className="text-xs font-bold text-white group-hover:text-cyan-400 flex items-center justify-between">
-                    <span>{p.name}</span>
-                    <span className="text-[10px] text-cyan-400/80 font-mono">{p.assetCount} assets</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 line-clamp-2 mt-1">
-                    {p.description}
-                  </p>
-                </button>
-              ))}
+            <div className="max-h-52 overflow-y-auto rounded-xl ring-1 ring-white/[0.06]">
+              <table className="w-full text-xs">
+                <thead className="bg-white/[0.03] text-slate-400 sticky top-0">
+                  <tr className="text-left">
+                    <th className="px-3 py-2 font-medium">Name</th>
+                    <th className="px-3 py-2 font-medium">Type</th>
+                    <th className="px-3 py-2 font-medium">Location</th>
+                    <th className="px-3 py-2 font-medium text-right">Value</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.04]">
+                  {parsed.slice(0, 50).map((r) => (
+                    <tr key={r.id}>
+                      <td className="px-3 py-1.5 text-white">{r.name}{assumed[r.id] && <span className="ml-2 text-[11px] text-amber-200">({assumed[r.id].join(', ')})</span>}</td>
+                      <td className="px-3 py-1.5 text-slate-400 truncate max-w-[200px]">{r.assetType}</td>
+                      <td className="px-3 py-1.5 text-slate-300">{r.city}, {r.country}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-200">{formatCurrencyUsd(r.replacementValueUsd)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
+        )}
 
-          {/* Parsing Results / Preview */}
-          {isValidating && (
-            <div className="p-4 rounded-xl bg-cyan-950/30 border border-cyan-800 text-center text-xs text-cyan-300 animate-pulse">
-              Parsing and validating geographic coordinates & asset schema...
-            </div>
-          )}
-
-          {validationErrors.length > 0 && (
-            <div className="p-4 rounded-xl bg-red-950/40 border border-red-800 text-xs text-red-300 space-y-1">
-              <div className="font-bold flex items-center gap-1.5 text-red-200">
-                <AlertCircle className="w-4 h-4 text-red-400" />
-                <span>Validation Errors Encountered:</span>
-              </div>
-              {validationErrors.slice(0, 5).map((err, i) => (
-                <div key={i} className="pl-5 text-red-300/90 font-mono text-[11px]">
-                  • {err}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {parsedRows.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <div className="font-bold text-emerald-400 flex items-center gap-1.5 font-mono">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Ready to Model: {parsedRows.length} Valid Assets from {fileName}</span>
-                </div>
-              </div>
-
-              {/* Preview Table */}
-              <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950">
-                <table className="w-full text-left text-xs font-mono">
-                  <thead className="bg-slate-900 text-slate-400 text-[10px] uppercase border-b border-slate-800 sticky top-0">
-                    <tr>
-                      <th className="px-3 py-2">Asset Name</th>
-                      <th className="px-3 py-2">Type</th>
-                      <th className="px-3 py-2">Lat, Lon</th>
-                      <th className="px-3 py-2 text-right">Replacement Value</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60 text-slate-300 text-[11px]">
-                    {parsedRows.slice(0, 10).map((row, i) => (
-                      <tr key={i} className="hover:bg-slate-900/40">
-                        <td className="px-3 py-1.5 font-semibold text-white">{row.name}</td>
-                        <td className="px-3 py-1.5 text-slate-400 truncate max-w-[180px]">{row.assetType}</td>
-                        <td className="px-3 py-1.5 text-cyan-400">{row.latitude.toFixed(3)}°, {row.longitude.toFixed(3)}°</td>
-                        <td className="px-3 py-1.5 text-right font-bold text-slate-200">${(row.replacementValueUsd / 1e6).toFixed(1)}M</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-800 bg-slate-950 flex items-center justify-between">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition"
-          >
-            Cancel
-          </button>
-
-          <button
-            disabled={parsedRows.length === 0}
-            onClick={handleConfirmUpload}
-            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs shadow-lg shadow-cyan-600/30 transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-          >
-            <span>Run Climate Risk Analytics ({parsedRows.length} Assets)</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
+        <div>
+          <div className="text-xs text-slate-500 mb-2">Or start from a sample portfolio</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {SAMPLE_PORTFOLIOS.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => { onLoadSamplePortfolio(p.id); onClose(); }}
+                className="text-left rounded-xl bg-white/[0.03] hover:bg-white/[0.06] ring-1 ring-white/[0.06] px-3 py-2.5"
+              >
+                <div className="flex justify-between gap-2 text-sm text-white"><span className="line-clamp-2">{p.name}</span><span className="text-xs text-slate-400 shrink-0">{p.assetCount} sites</span></div>
+                <div className="text-xs text-slate-500 line-clamp-1 mt-0.5">{p.description}</div>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
-    </div>
+
+      <div className="px-6 py-4 border-t border-white/[0.06] flex items-center justify-end gap-2">
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button
+          variant="primary"
+          icon={<Upload className="w-4 h-4" />}
+          disabled={parsed.length === 0}
+          onClick={() => { onUploadAssets(parsed, currentAssetCount > 0 ? mode : 'replace'); onClose(); }}
+        >
+          {currentAssetCount > 0
+            ? mode === 'append'
+              ? `Add ${parsed.length || ''} site${parsed.length === 1 ? '' : 's'} to current portfolio`
+              : `Replace portfolio with ${parsed.length || ''} site${parsed.length === 1 ? '' : 's'}`
+            : `Import ${parsed.length || ''} site${parsed.length === 1 ? '' : 's'}`}
+        </Button>
+      </div>
+    </ModalShell>
   );
 };
-

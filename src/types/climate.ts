@@ -59,7 +59,50 @@ export type HazardType =
   | 'tropical_cyclone'
   | 'wildfire'
   | 'subsidence'
-  | 'landslide';
+  | 'landslide'
+  // --- Added hazards (EU Taxonomy Appendix A, Munich Re NATHAN, ThinkHazard, WRI Aqueduct coverage) ---
+  | 'sea_level_rise'
+  | 'coastal_erosion'
+  | 'saline_intrusion'
+  | 'groundwater_decline'
+  | 'extratropical_storm'
+  | 'hail'
+  | 'tornado'
+  | 'lightning'
+  | 'sand_dust_storm'
+  | 'permafrost_thaw'
+  | 'avalanche'
+  | 'glacial_lake_outburst'
+  | 'earthquake'
+  | 'tsunami'
+  | 'volcano';
+
+export type HazardFamily = 'flood' | 'wind' | 'thermal' | 'water' | 'fire' | 'ground';
+
+export interface HazardTaxonomyEntry {
+  family: HazardFamily;
+  onset: 'acute' | 'chronic';
+  climateDriven: boolean; // false for geophysical perils (earthquake, tsunami, volcano)
+  euTaxonomy: string; // closest EU Taxonomy Appendix A hazard
+}
+
+/** Observed / projected values fetched from open APIs for one site (all optional). */
+export interface LiveSiteData {
+  fetchedAt: string;
+  demElevationM?: number; // Copernicus GLO-90 via Open-Meteo
+  heatDays35Now?: number; // days/yr Tmax > 35°C, CMIP6 HighResMIP 2015-2024
+  heatDays35Mid?: number; // same, 2041-2050
+  frostDaysNow?: number; // days/yr Tmin < 0°C
+  frostDaysMid?: number;
+  rx1dayNowMm?: number; // mean annual max 1-day precipitation
+  rx1dayMidMm?: number;
+  windMaxNowKmh?: number; // mean annual max of daily max 10 m wind
+  windMaxMidKmh?: number;
+  quakesM5Within150km?: number; // USGS ComCat, M>=5 since 1975
+  riverMaxDischargeM3s?: number; // GloFAS mean annual max discharge, nearest river cell
+  models?: string[];
+  errors?: string[];
+}
 
 export type RiskRating = 'Very Low' | 'Low' | 'Moderate' | 'High' | 'Severe' | 'Catastrophic';
 
@@ -67,7 +110,8 @@ export interface HazardMeta {
   id: HazardType;
   name: string;
   shortName: string;
-  category: 'Flood' | 'Water & Drought' | 'Thermal' | 'Wind & Storm' | 'Geophysical & Fire';
+  technicalName?: string;
+  category: 'Flood' | 'Water & Drought' | 'Thermal' | 'Wind & Storm' | 'Geophysical & Fire' | 'Geophysical';
   unit: string;
   description: string;
   cmip6ModelBasis: string;
@@ -134,6 +178,7 @@ export interface Asset {
   squareMeters?: number;
   criticalityTier: 1 | 2 | 3; // 1 = Critical, 2 = Core, 3 = Non-critical
   tags?: string[];
+  liveData?: LiveSiteData; // when present, overrides modelled baselines for the matching hazards
 }
 
 export interface AssetRiskAssessment {
@@ -157,6 +202,8 @@ export interface AssetRiskAssessment {
   hazardResults: Record<HazardType, HazardMetricResult>;
   primaryHazard: HazardType;
   primaryHazardScore: number;
+  familyScores: Array<{ family: HazardFamily; score: number; topHazard: HazardType | null }>;
+  usesLiveData: boolean;
   decadeTrajectory: Array<{
     decade: Decade;
     compositeScore: number;

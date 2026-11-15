@@ -1,350 +1,130 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { Search, ArrowRight } from 'lucide-react';
 import { CORPORATE_ENTITIES_SAMPLE } from '../services/corporateEntities';
-import { CorporateEntity } from '../types/climate';
-import { HAZARD_CATALOG } from '../services/climateEngine';
-import {
-  Building2,
-  Search,
-  Database,
-  Globe2,
-  Filter,
-  ChevronLeft,
-  ChevronRight,
-  ExternalLink,
-} from 'lucide-react';
+import { Asset, CorporateEntity } from '../types/climate';
+import { HAZARD_CATALOG, HAZARD_FAMILIES, HAZARD_TAXONOMY, formatCurrencyUsd, getRatingFromScore } from '../services/climateEngine';
+import { assetsForEntity } from '../services/entityMatch';
+import { Card, Kpi, RatingBadge, Select, Button, EmptyState, cx } from './ui';
 
 interface CorporateEntityExplorerProps {
   onLoadEntityPortfolio?: (entityName: string) => void;
+  knownAssets?: Asset[];
 }
 
-export const CorporateEntityExplorer: React.FC<CorporateEntityExplorerProps> = ({
-  onLoadEntityPortfolio,
-}) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSector, setSelectedSector] = useState<string>('all');
-  const [selectedRating, setSelectedRating] = useState<string>('all');
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const itemsPerPage = 8;
-  const [selectedEntity, setSelectedEntity] = useState<CorporateEntity | null>(
-    CORPORATE_ENTITIES_SAMPLE[0]
-  );
+export const CorporateEntityExplorer: React.FC<CorporateEntityExplorerProps> = ({ onLoadEntityPortfolio, knownAssets = [] }) => {
+  const [q, setQ] = useState('');
+  const [sector, setSector] = useState('all');
+  const [sel, setSel] = useState<CorporateEntity>(CORPORATE_ENTITIES_SAMPLE[0]);
 
-  const allSectors = Array.from(
-    new Set(CORPORATE_ENTITIES_SAMPLE.map((e) => e.sector.split(' / ')[0]))
-  ).sort();
+  const sectors = useMemo(() => Array.from(new Set(CORPORATE_ENTITIES_SAMPLE.map((e) => e.sector.split(' / ')[0]))).sort(), []);
+  const matches = useMemo(() => new Map(CORPORATE_ENTITIES_SAMPLE.map((e) => [e.id, assetsForEntity(e.name, knownAssets)])), [knownAssets]);
 
-  const handleSearchChange = (val: string) => {
-    setSearchQuery(val);
-    setCurrentPage(1);
-  };
+  const rows = CORPORATE_ENTITIES_SAMPLE.filter((e) => {
+    const hay = `${e.name} ${e.ticker ?? ''} ${e.sector} ${e.headquarters}`.toLowerCase();
+    return hay.includes(q.toLowerCase()) && (sector === 'all' || e.sector.startsWith(sector));
+  }).sort((a, b) => b.aggregatePhysicalRiskScore - a.aggregatePhysicalRiskScore);
 
-  const handleSectorChange = (val: string) => {
-    setSelectedSector(val);
-    setCurrentPage(1);
-  };
-
-  const handleRatingChange = (val: string) => {
-    setSelectedRating(val);
-    setCurrentPage(1);
-  };
-
-  const filteredEntities = CORPORATE_ENTITIES_SAMPLE.filter((ent) => {
-    const q = searchQuery.toLowerCase();
-    const matchesSearch =
-      ent.name.toLowerCase().includes(q) ||
-      ent.sector.toLowerCase().includes(q) ||
-      (ent.ticker && ent.ticker.toLowerCase().includes(q)) ||
-      ent.headquarters.toLowerCase().includes(q);
-    const matchesSector =
-      selectedSector === 'all' ||
-      ent.sector.toLowerCase().includes(selectedSector.toLowerCase());
-    const matchesRating = selectedRating === 'all' || ent.climateRating === selectedRating;
-    return matchesSearch && matchesSector && matchesRating;
-  });
-
-  const totalPages = Math.max(1, Math.ceil(filteredEntities.length / itemsPerPage));
-  const safePage = Math.min(currentPage, totalPages);
-  const paginatedEntities = filteredEntities.slice(
-    (safePage - 1) * itemsPerPage,
-    safePage * itemsPerPage
-  );
+  const selMatches = matches.get(sel.id) ?? [];
+  const selRating = getRatingFromScore(sel.aggregatePhysicalRiskScore);
 
   return (
-    <div className="max-w-[1720px] mx-auto px-4 sm:px-6 py-6 space-y-6 text-slate-100">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-900/90 to-indigo-950/40 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
-        <div className="max-w-3xl space-y-2 relative z-10">
-          <div className="flex items-center gap-2 text-cyan-400 font-mono text-xs uppercase tracking-wider">
-            <Building2 className="w-4 h-4" />
-            <span>Proprietary Geo-Specific Corporate Intelligence</span>
-          </div>
-          <h2 className="text-2xl font-black text-white tracking-tight">
-            9M+ Asset Locations • 850,000+ Corporate Entities (99% Global Market Cap)
-          </h2>
-          <p className="text-xs text-slate-300 leading-relaxed">
-            Every physical facility is linked to parent corporations and ultimate parent entities (UPEs) globally. Seamlessly screen entity-level physical risk exposures, portfolio replacement values, TCFD alignment scores, and aggregate climate ratings.
-          </p>
-        </div>
-        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+    <div className="px-4 sm:px-6 py-6 space-y-5">
+      <div>
+        <h1 className="text-xl sm:text-2xl font-semibold text-white tracking-tight">Companies</h1>
+        <p className="text-sm text-slate-400 mt-1">
+          Company-level physical risk for issuers and counterparties. Where a company’s sites are in the loaded data you can open them on the dashboard. Sample of {CORPORATE_ENTITIES_SAMPLE.length} companies.
+        </p>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 p-3 rounded-xl shadow-lg">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
-            <Database className="w-4 h-4 text-cyan-400" />
-            <span>Universe: {filteredEntities.length} of {CORPORATE_ENTITIES_SAMPLE.length} Entities</span>
-          </div>
-
-          {/* Sector Filter */}
-          <div className="flex items-center gap-1.5 text-xs">
-            <Filter className="w-3.5 h-3.5 text-slate-500" />
-            <select
-              value={selectedSector}
-              onChange={(e) => handleSectorChange(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-200 text-xs focus:outline-none focus:border-cyan-500"
-            >
-              <option value="all">All Sectors ({CORPORATE_ENTITIES_SAMPLE.length})</option>
-              {allSectors.map((sec) => (
-                <option key={sec} value={sec}>
-                  {sec}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Climate Rating Filter */}
-          <div className="flex items-center gap-1.5 text-xs">
-            <select
-              value={selectedRating}
-              onChange={(e) => handleRatingChange(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-200 text-xs focus:outline-none focus:border-cyan-500 font-mono"
-            >
-              <option value="all">All Ratings</option>
-              <option value="AAA">Rating AAA</option>
-              <option value="AA">Rating AA</option>
-              <option value="A">Rating A</option>
-              <option value="BBB">Rating BBB</option>
-              <option value="CCC">Rating CCC</option>
-            </select>
-          </div>
-        </div>
-
+      <div className="flex flex-wrap items-center gap-2">
         <div className="relative">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
-            type="text"
-            placeholder="Search corporate entity, ticker, sector..."
-            value={searchQuery}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-500 w-72"
+            value={q}
+            onChange={(ev) => setQ(ev.target.value)}
+            placeholder="Search company, ticker or sector"
+            aria-label="Search companies"
+            className="w-64 rounded-xl bg-slate-950/70 ring-1 ring-inset ring-white/[0.08] pl-8 pr-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-cyan-400/60"
           />
         </div>
+        <Select value={sector} onChange={(ev) => setSector(ev.target.value)} aria-label="Sector">
+          <option value="all">All sectors</option>
+          {sectors.map((s) => <option key={s} value={s}>{s}</option>)}
+        </Select>
       </div>
 
-      {/* Main Grid: Corporate Table & Selected Entity Profile */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Table (7 Cols) */}
-        <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl shadow-xl overflow-hidden flex flex-col justify-between">
-          <div>
-            <div className="p-3.5 border-b border-slate-800 text-xs font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-              <span>Corporate Universe ({filteredEntities.length})</span>
-              <span className="text-cyan-400 text-[11px] font-normal">Click entity to inspect physical footprint</span>
-            </div>
-            <div className="overflow-x-auto max-h-[520px]">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-950/80 text-[11px] font-mono text-slate-400 uppercase tracking-wider border-b border-slate-800 sticky top-0">
-                  <tr>
-                    <th className="px-3.5 py-2.5">Corporate Entity & Ticker</th>
-                    <th className="px-3.5 py-2.5 text-right">Market Cap</th>
-                    <th className="px-3.5 py-2.5 text-center">Tracked Assets</th>
-                    <th className="px-3.5 py-2.5 text-center">Physical Score</th>
-                    <th className="px-3.5 py-2.5 text-center">Climate Rating</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60 font-sans">
-                  {paginatedEntities.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="text-center py-8 text-slate-500 font-mono">
-                        No corporate entities match the active filters.
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
+        <Card className="xl:col-span-7" bodyClassName="p-0">
+          <div className="relative overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-xs text-slate-400 bg-white/[0.02]">
+                <tr className="text-left">
+                  <th className="px-4 py-2.5 font-medium">Company</th>
+                  <th className="px-4 py-2.5 font-medium">Physical risk</th>
+                  <th className="px-4 py-2.5 font-medium text-right">Market cap</th>
+                  <th className="px-4 py-2.5 font-medium text-right">Climate rating</th>
+                  <th className="px-4 py-2.5 font-medium text-right" title="Sites of this company in the loaded data">In data</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/[0.04]">
+                {rows.map((e) => {
+                  const active = e.id === sel.id;
+                  const n = matches.get(e.id)?.length ?? 0;
+                  return (
+                    <tr key={e.id} onClick={() => setSel(e)} className={cx('cursor-pointer', active ? 'bg-cyan-400/[0.06]' : 'hover:bg-white/[0.03]')}>
+                      <td className={cx('px-4 py-2.5', active && 'shadow-[inset_3px_0_0_#22d3ee]')}>
+                        <div className="text-white">{e.name}</div>
+                        <div className="text-xs text-slate-500">{e.ticker ? `${e.ticker} · ` : ''}{e.sector}</div>
                       </td>
+                      <td className="px-4 py-2.5"><RatingBadge rating={getRatingFromScore(e.aggregatePhysicalRiskScore)} score={e.aggregatePhysicalRiskScore} /></td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-slate-200">{formatCurrencyUsd(e.marketCapUsdBillions * 1e9)}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-slate-200">{e.climateRating}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{n ? <span className="text-white">{n}</span> : <span className="text-slate-600">—</span>}</td>
                     </tr>
-                  ) : (
-                    paginatedEntities.map((ent) => {
-                      const isSelected = selectedEntity?.id === ent.id;
-                      return (
-                        <tr
-                          key={ent.id}
-                          onClick={() => setSelectedEntity(ent)}
-                          className={`hover:bg-slate-800/40 cursor-pointer transition ${
-                            isSelected ? 'bg-cyan-950/40 border-l-4 border-cyan-400' : ''
-                          }`}
-                        >
-                          <td className="px-3.5 py-3">
-                            <div className="font-bold text-white flex items-center gap-1.5">
-                              <span>{ent.name}</span>
-                              {ent.ticker && (
-                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-cyan-300 font-mono">
-                                  {ent.ticker}
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-[10px] text-slate-400 font-mono mt-0.5">{ent.sector}</div>
-                          </td>
-                          <td className="px-3.5 py-3 text-right font-mono font-bold text-slate-200">
-                            ${ent.marketCapUsdBillions}B
-                          </td>
-                          <td className="px-3.5 py-3 text-center font-mono text-cyan-300">
-                            {ent.trackedAssetCount.toLocaleString()} locations
-                          </td>
-                          <td className="px-3.5 py-3 text-center font-mono font-black text-xs text-amber-300">
-                            {ent.aggregatePhysicalRiskScore} / 100
-                          </td>
-                          <td className="px-3.5 py-3 text-center">
-                            <span className={`text-[10px] px-2 py-0.5 rounded font-bold font-mono ${
-                              ent.climateRating === 'AAA' || ent.climateRating === 'AA'
-                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                                : ent.climateRating === 'A' || ent.climateRating === 'BBB'
-                                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40'
-                                : 'bg-red-500/20 text-red-400 border border-red-500/40'
-                            }`}>
-                              {ent.climateRating}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  );
+                })}
+                {rows.length === 0 && <tr><td colSpan={5}><EmptyState title="No companies match" /></td></tr>}
+              </tbody>
+            </table>
           </div>
+        </Card>
 
-          {/* Pagination Footer */}
-          <div className="p-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between text-xs font-mono text-slate-400">
-            <span>
-              Showing {filteredEntities.length === 0 ? 0 : (safePage - 1) * itemsPerPage + 1} -{' '}
-              {Math.min(safePage * itemsPerPage, filteredEntities.length)} of {filteredEntities.length}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                disabled={safePage <= 1}
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                className="p-1 rounded bg-slate-900 border border-slate-800 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-800 text-slate-200"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="text-slate-300 font-bold">
-                Page {safePage} / {totalPages}
-              </span>
-              <button
-                disabled={safePage >= totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                className="p-1 rounded bg-slate-900 border border-slate-800 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-800 text-slate-200"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
+        <Card className="xl:col-span-5" title={sel.name} subtitle={`${sel.sector} · HQ ${sel.headquarters} · parent ${sel.ultimateParent}`}>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between text-xs text-slate-400">
+              <span>Aggregate physical risk</span>
+              <RatingBadge rating={selRating} score={sel.aggregatePhysicalRiskScore} size="md" />
             </div>
-          </div>
-        </div>
-
-        {/* Selected Entity Dossier (5 Cols) */}
-        <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl space-y-4">
-          {selectedEntity ? (
-            <>
-              <div className="border-b border-slate-800 pb-3">
-                <div className="flex items-center justify-between text-xs font-mono text-slate-400">
-                  <span>HQ: {selectedEntity.headquarters}</span>
-                  <span className="px-2 py-0.5 rounded bg-slate-800 text-cyan-400 font-bold border border-slate-700">
-                    Parent: {selectedEntity.ultimateParent}
+            <div className="grid grid-cols-2 gap-2">
+              <Kpi label="Market cap" value={formatCurrencyUsd(sel.marketCapUsdBillions * 1e9)} />
+              <Kpi label="Asset replacement value" value={formatCurrencyUsd(sel.portfolioReplacementValueUsd)} sub={`${sel.trackedAssetCount.toLocaleString()} tracked locations`} />
+              <Kpi label="Climate rating" value={sel.climateRating} sub="AAA (best) to CCC" />
+              <Kpi label="TCFD alignment" value={`${sel.tcfdAlignmentScore}%`} sub="disclosure completeness" />
+            </div>
+            <div>
+              <div className="text-xs text-slate-400 mb-2">Top hazards</div>
+              <div className="flex flex-wrap gap-1.5">
+                {sel.topHazardRisks.map((h) => (
+                  <span key={h} className="inline-flex items-center gap-1.5 rounded-lg bg-white/[0.04] px-2 py-1 text-xs text-slate-200">
+                    <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: HAZARD_FAMILIES.find((f) => f.id === HAZARD_TAXONOMY[h].family)!.color }} />
+                    {HAZARD_CATALOG[h].shortName}
                   </span>
-                </div>
-                <h3 className="text-xl font-bold text-white mt-1">
-                  {selectedEntity.name}
-                </h3>
-                <div className="text-xs text-slate-400 mt-0.5 font-mono">
-                  Sector: {selectedEntity.sector}
-                </div>
+                ))}
               </div>
-
-              {/* KPI Strip */}
-              <div className="grid grid-cols-2 gap-3 text-xs font-mono">
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="text-slate-400 font-sans text-[11px]">Market Capitalization</span>
-                  <div className="text-xl font-black text-white mt-0.5">
-                    ${selectedEntity.marketCapUsdBillions}B
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="text-slate-400 font-sans text-[11px]">Portfolio Replacement Value</span>
-                  <div className="text-xl font-black text-cyan-300 mt-0.5">
-                    ${(selectedEntity.portfolioReplacementValueUsd / 1e9).toFixed(1)}B
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="text-slate-400 font-sans text-[11px]">Aggregate Physical Risk Score</span>
-                  <div className="text-xl font-black text-amber-400 mt-0.5">
-                    {selectedEntity.aggregatePhysicalRiskScore} / 100
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="text-slate-400 font-sans text-[11px]">TCFD Disclosure Alignment</span>
-                  <div className="text-xl font-black text-emerald-400 mt-0.5">
-                    {selectedEntity.tcfdAlignmentScore}%
-                  </div>
-                </div>
+            </div>
+            {onLoadEntityPortfolio && (
+              <div className="rounded-xl bg-white/[0.03] px-4 py-3 flex items-center justify-between gap-3">
+                <span className="text-sm text-slate-300">
+                  {selMatches.length ? `${selMatches.length} site${selMatches.length === 1 ? '' : 's'} in the loaded data` : 'No sites for this company in the loaded data'}
+                </span>
+                <Button size="sm" variant="primary" disabled={!selMatches.length} icon={<ArrowRight className="w-4 h-4" />} onClick={() => onLoadEntityPortfolio(sel.name)}>
+                  Show on dashboard
+                </Button>
               </div>
-
-              {/* Top Hazard Risks */}
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono mb-2">
-                  Top Physical Hazard Vulnerabilities:
-                </h4>
-                <div className="space-y-1.5">
-                  {selectedEntity.topHazardRisks.map((hId) => {
-                    const meta = HAZARD_CATALOG[hId];
-                    return (
-                      <div key={hId} className="p-2 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
-                        <span className="font-semibold text-slate-200 flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: meta.colorHex }} />
-                          <span>{meta.name}</span>
-                        </span>
-                        <span className="text-cyan-400 font-mono text-[11px]">{meta.category}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 9M+ Asset Database Citation */}
-              <div className="p-3 rounded-xl bg-indigo-950/30 border border-indigo-800/40 text-xs text-slate-300 space-y-1.5">
-                <div className="font-bold text-indigo-300 font-mono flex items-center gap-1.5">
-                  <Globe2 className="w-4 h-4" />
-                  <span>Geo-Spatial Footprint Coverage</span>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Linked to <strong>{selectedEntity.trackedAssetCount} geocoded physical facilities</strong> in our 9M+ global asset database, verified via satellite imagery and regulatory corporate registry filings.
-                </p>
-              </div>
-
-              {/* Action Button: Load into Terminal */}
-              {onLoadEntityPortfolio && (
-                <button
-                  onClick={() => onLoadEntityPortfolio(selectedEntity.name)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs transition shadow-md shadow-cyan-600/30 cursor-pointer"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Inspect {selectedEntity.name.split(' ')[0]} Facilities in Terminal</span>
-                </button>
-              )}
-            </>
-          ) : null}
-        </div>
+            )}
+          </div>
+        </Card>
       </div>
     </div>
   );
 };
-

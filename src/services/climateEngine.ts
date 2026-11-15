@@ -14,7 +14,22 @@ import {
   SpatialResolutionMeta,
   RegulatoryFramework,
   RegulatoryFrameworkMeta,
+  LiveSiteData,
+  HazardFamily,
 } from '../types/climate';
+import {
+  EXTENDED_HAZARD_META,
+  EXTENDED_DEFAULT_WEIGHTS,
+  HAZARD_TAXONOMY,
+  HAZARD_FAMILIES,
+  applyExtendedWeightTweaks,
+  computeExtendedBaselines,
+  extendedAdaptation,
+  extendedClimateFactor,
+  typeHasKeyword,
+} from './extendedHazards';
+
+export { HAZARD_TAXONOMY, HAZARD_FAMILIES } from './extendedHazards';
 
 // CMIP6 Scenario Definitions aligned with IPCC AR6 & NGFS Phase IV
 export const SSP_SCENARIOS: Record<SSPScenario, SSPScenarioMeta> = {
@@ -22,9 +37,9 @@ export const SSP_SCENARIOS: Record<SSPScenario, SSPScenarioMeta> = {
     id: 'ssp119',
     name: 'SSP1-1.9 (Paris 1.5°C Ambitious Target / Net Zero 2050)',
     code: 'SSP1-1.9',
-    ngfsEquivalent: 'NGFS Net Zero 2050 (Orderly)',
+    ngfsEquivalent: 'closest NGFS analogue: Net Zero 2050',
     description: 'Immediate deep decarbonization across all economic sectors. Warming strictly capped at ~1.5°C by 2100 with negligible overshoot.',
-    warming2100: '+1.5°C',
+    warming2100: '+1.4°C',
     co2Trajectory: 'Halved by 2030, Net-Zero global emissions by 2050',
     color: '#059669', // deep emerald
   },
@@ -32,7 +47,7 @@ export const SSP_SCENARIOS: Record<SSPScenario, SSPScenarioMeta> = {
     id: 'ssp126',
     name: 'SSP1-2.6 (Sustainability / Low Emissions)',
     code: 'SSP1-2.6',
-    ngfsEquivalent: 'NGFS Below 2°C (Orderly)',
+    ngfsEquivalent: 'closest NGFS analogue: Below 2°C',
     description: 'Paris Agreement aligned: Aggressive decarbonization, net-zero achieved ~2050-2070. Warming constrained to ~1.8°C by 2100.',
     warming2100: '+1.8°C',
     co2Trajectory: 'Steep decline from 2025; net zero ~2060',
@@ -42,7 +57,7 @@ export const SSP_SCENARIOS: Record<SSPScenario, SSPScenarioMeta> = {
     id: 'ssp245',
     name: 'SSP2-4.5 (Middle of the Road / Intermediate)',
     code: 'SSP2-4.5',
-    ngfsEquivalent: 'NGFS Delayed Transition (Disorderly)',
+    ngfsEquivalent: 'closest NGFS analogue: Nationally Determined Contributions',
     description: 'Current stated policy path: Moderate emissions reductions, warming reaches ~2.7°C by 2100. Uneven regional adaptation.',
     warming2100: '+2.7°C',
     co2Trajectory: 'Peaks around 2040, then slow decrease',
@@ -52,7 +67,7 @@ export const SSP_SCENARIOS: Record<SSPScenario, SSPScenarioMeta> = {
     id: 'ssp370',
     name: 'SSP3-7.0 (Regional Rivalry / High Emissions)',
     code: 'SSP3-7.0',
-    ngfsEquivalent: 'NGFS Nationally Determined Contributions (Hot House)',
+    ngfsEquivalent: 'closest NGFS analogue: Current Policies',
     description: 'National security focus, weak international cooperation, continued fossil reliance. Warming reaches ~3.6°C by 2100.',
     warming2100: '+3.6°C',
     co2Trajectory: 'Doubles by 2080',
@@ -62,7 +77,7 @@ export const SSP_SCENARIOS: Record<SSPScenario, SSPScenarioMeta> = {
     id: 'ssp585',
     name: 'SSP5-8.5 (Fossil-Fueled Development / Worst-Case)',
     code: 'SSP5-8.5',
-    ngfsEquivalent: 'NGFS Current Policies / Extreme Tail Risk',
+    ngfsEquivalent: 'beyond NGFS Current Policies (no direct analogue)',
     description: 'Energy-intensive economic growth driven by coal and hydrocarbons. Severe tipping points crossed, ~4.4°C warming by 2100.',
     warming2100: '+4.4°C',
     co2Trajectory: 'Surges throughout 21st century',
@@ -74,37 +89,37 @@ export const SSP_SCENARIOS: Record<SSPScenario, SSPScenarioMeta> = {
 export const SPATIAL_RESOLUTIONS: Record<SpatialResolution, SpatialResolutionMeta> = {
   '25km': {
     id: '25km',
-    name: 'CMIP6 HighResMIP Global Grid (25km / 0.25°)',
+    name: 'Global climate grid (25km / 0.25°)',
     gridSizeKm: 25,
     provider: 'World Climate Research Programme (WCRP / CMIP6)',
-    methodology: 'Coupled GCM multi-model ensemble (GFDL-ESM4, CESM2, UKESM1, MPI-ESM1, EC-Earth3)',
+    methodology: 'Grid matching NASA NEX-GDDP-CMIP6 and CMIP6 HighResMIP (0.25°). Hazard values here are screening estimates, not model output.',
     uncertaintyBandPercent: 14.5,
     badgeColor: 'text-blue-400 bg-blue-950/60 border-blue-800',
   },
   '10km': {
     id: '10km',
-    name: 'CORDEX Dynamical Regional Downscaling (10km / 0.10°)',
+    name: 'Regional grid (10km / 0.10°)',
     gridSizeKm: 10,
     provider: 'WCRP Coordinated Regional Climate Downscaling Experiment',
-    methodology: 'Dynamical mesoscale atmospheric modeling (RegCM4 & WRF) capturing regional orographic precipitation and coastal winds',
+    methodology: 'Grid matching CORDEX / ERA5-Land regional data (≈0.1°). Screening estimates.',
     uncertaintyBandPercent: 9.8,
     badgeColor: 'text-cyan-400 bg-cyan-950/60 border-cyan-800',
   },
   '1km': {
     id: '1km',
-    name: 'NASA NEX-GDDP High-Res Statistical Grid (1km / 0.01°)',
+    name: 'Local grid (1km / 0.01°)',
     gridSizeKm: 1,
-    provider: 'NASA Center for Climate Simulation (NCCS / NEX-GDDP-CMIP6)',
-    methodology: 'Bias-Correction Spatial Disaggregation (BCSD) calibrated with ERA5-Land reanalysis and PRISM high-density station networks',
+    provider: 'Statistical downscaling (e.g. CHELSA / WorldClim, ~1 km)',
+    methodology: 'Grid matching 1 km downscaled climatologies. Screening estimates.',
     uncertaintyBandPercent: 5.2,
     badgeColor: 'text-emerald-400 bg-emerald-950/60 border-emerald-800',
   },
   '90m': {
     id: '90m',
-    name: 'Copernicus / USGS SRTM Hydro-DEM Topo (90m / 3-arc-sec)',
+    name: 'Terrain grid (90m / 3 arc-sec)',
     gridSizeKm: 0.09,
     provider: 'Copernicus GLO-30 / USGS SRTM Water Body Hydrological Mesh',
-    methodology: 'Sub-hectare hydrodynamic elevation profiling with 1D/2D hydraulic flow routing (LISFLOOD-FP / CaMa-Flood) for facility-level perimeter clearance',
+    methodology: 'Grid matching the Copernicus GLO-90 DEM used for live elevation. Fetch live data for the real ground height.',
     uncertaintyBandPercent: 2.1,
     badgeColor: 'text-purple-400 bg-purple-950/60 border-purple-800',
   },
@@ -198,7 +213,7 @@ export const REGULATORY_FRAMEWORKS: Record<RegulatoryFramework, RegulatoryFramew
   },
 };
 
-// 12 Climate Change Hazards Registry
+// Hazard registry: 12 core climate hazards + 15 extended perils (see extendedHazards.ts)
 export const HAZARD_CATALOG: Record<HazardType, HazardMeta> = {
   coastal_flood: {
     id: 'coastal_flood',
@@ -332,7 +347,17 @@ export const HAZARD_CATALOG: Record<HazardType, HazardMeta> = {
     iconName: 'Mountain',
     colorHex: '#57534e',
   },
+  ...EXTENDED_HAZARD_META,
 };
+
+// One display name per hazard everywhere in the UI; the longer technical name is kept for How it works.
+const DISPLAY_NAMES: Partial<Record<HazardType, string>> = { tropical_cyclone: 'Tropical Cyclone', subsidence: 'Subsidence' };
+for (const h of Object.keys(HAZARD_CATALOG) as HazardType[]) {
+  const m = HAZARD_CATALOG[h];
+  const short = DISPLAY_NAMES[h] ?? m.shortName;
+  // Fresh object: never mutate EXTENDED_HAZARD_META (shared module state, HMR-safe)
+  HAZARD_CATALOG[h] = { ...m, technicalName: m.technicalName ?? m.name, shortName: short, name: short };
+}
 
 export const ALL_HAZARDS: HazardType[] = Object.keys(HAZARD_CATALOG) as HazardType[];
 
@@ -466,10 +491,11 @@ export function getAssetVulnerabilityWeights(assetType: string): Record<HazardTy
     wildfire: 0.8,
     subsidence: 0.9,
     landslide: 0.9,
+    ...EXTENDED_DEFAULT_WEIGHTS,
   };
 
   // Semiconductor & High-Tech: Super sensitive to water/vibration/power
-  if (lower.includes('semiconductor') || lower.includes('cleanroom') || lower.includes('foundry') || lower.includes('nanotech')) {
+  if (typeHasKeyword(lower, 'semiconductor') || typeHasKeyword(lower, 'cleanroom') || typeHasKeyword(lower, 'foundry') || typeHasKeyword(lower, 'nanotech')) {
     weights.coastal_flood = 2.4;
     weights.fluvial_flood = 2.2;
     weights.pluvial_flood = 1.9;
@@ -479,7 +505,7 @@ export function getAssetVulnerabilityWeights(assetType: string): Record<HazardTy
   }
   
   // Data Centers: High sensitivity to extreme heat, heat stress, water stress for cooling towers
-  else if (lower.includes('data center') || lower.includes('telecom') || lower.includes('switch') || lower.includes('fiber')) {
+  else if (typeHasKeyword(lower, 'data center') || typeHasKeyword(lower, 'telecom') || typeHasKeyword(lower, 'switch') || typeHasKeyword(lower, 'fiber')) {
     weights.extreme_heat = 2.3; // Cooling capacity threshold
     weights.heat_stress = 2.1;
     weights.water_stress = 2.2; // Evaporative cooling water availability
@@ -490,7 +516,7 @@ export function getAssetVulnerabilityWeights(assetType: string): Record<HazardTy
   }
 
   // Ports & Marine
-  else if (lower.includes('port') || lower.includes('dock') || lower.includes('shipping') || lower.includes('marine') || lower.includes('ferry')) {
+  else if (typeHasKeyword(lower, 'port') || typeHasKeyword(lower, 'dock') || typeHasKeyword(lower, 'shipping') || typeHasKeyword(lower, 'marine') || typeHasKeyword(lower, 'ferry')) {
     weights.coastal_flood = 2.5; // Direct wave inundation
     weights.tropical_cyclone = 2.4; // Storm surge and gantry crane tipping
     weights.subsidence = 1.4;
@@ -499,14 +525,14 @@ export function getAssetVulnerabilityWeights(assetType: string): Record<HazardTy
   }
 
   // Solar & Wind Renewable Energy
-  else if (lower.includes('solar') || lower.includes('pv')) {
+  else if (typeHasKeyword(lower, 'solar') || typeHasKeyword(lower, 'pv')) {
     weights.tropical_cyclone = 2.2; // Module tear-off
     weights.extreme_heat = 1.6; // Solar cell efficiency derating (-0.4%/°C)
     weights.wildfire = 2.1; // Smoke soot deposition & fire
     weights.fluvial_flood = 1.2;
     weights.drought = 0.2;
   }
-  else if (lower.includes('wind')) {
+  else if (typeHasKeyword(lower, 'wind')) {
     weights.tropical_cyclone = 2.5; // Structural yaw/pitch gust limits
     weights.extreme_cold = 1.9; // Blade icing
     weights.wildfire = 1.4;
@@ -514,7 +540,7 @@ export function getAssetVulnerabilityWeights(assetType: string): Record<HazardTy
   }
 
   // Real Estate High-Rise
-  else if (lower.includes('tower') || lower.includes('office') || lower.includes('residential')) {
+  else if (typeHasKeyword(lower, 'tower') || typeHasKeyword(lower, 'office') || typeHasKeyword(lower, 'residential')) {
     weights.tropical_cyclone = 1.9; // Cladding and window facade blow-out
     weights.coastal_flood = 1.7; // Basement parking & switchgear
     weights.subsidence = 1.5; // Foundation shear
@@ -522,7 +548,7 @@ export function getAssetVulnerabilityWeights(assetType: string): Record<HazardTy
   }
 
   // Logistics & Warehousing
-  else if (lower.includes('warehouse') || lower.includes('logistics') || lower.includes('fulfillment')) {
+  else if (typeHasKeyword(lower, 'warehouse') || typeHasKeyword(lower, 'logistics') || typeHasKeyword(lower, 'fulfillment')) {
     weights.pluvial_flood = 1.8; // Low slab-on-grade roof runoff
     weights.tropical_cyclone = 1.9; // Large-span light metal deck roof uplift
     weights.extreme_heat = 1.7; // Indoor worker safety OSHA thresholds
@@ -530,7 +556,7 @@ export function getAssetVulnerabilityWeights(assetType: string): Record<HazardTy
   }
 
   // Hospitals & Healthcare
-  else if (lower.includes('hospital') || lower.includes('medical') || lower.includes('health')) {
+  else if (typeHasKeyword(lower, 'hospital') || typeHasKeyword(lower, 'medical') || typeHasKeyword(lower, 'health')) {
     weights.coastal_flood = 2.2;
     weights.fluvial_flood = 2.0;
     weights.extreme_heat = 2.0; // Life safety & patient influx
@@ -538,6 +564,7 @@ export function getAssetVulnerabilityWeights(assetType: string): Record<HazardTy
     weights.tropical_cyclone = 2.0;
   }
 
+  applyExtendedWeightTweaks(lower, weights);
   return weights;
 }
 
@@ -551,54 +578,73 @@ export const RETURN_PERIOD_MULTIPLIERS: Record<ReturnPeriod, number> = {
   '500yr': 3.42, // 1-in-500 year event
 };
 
-// Decade Climate Trajectory Factors by SSP Scenario
-export function getDecadeFactor(scenario: SSPScenario, decade: Decade): number {
-  const base = 1.0; // 2025 baseline
-  const decadeOffset = (decade - 2025) / 10; // 0 to 6.5
+// Hazard-intensity score scaling per return period. Must be monotonic: a rarer
+// event is never less intense than the average-year (AAL) view.
+export const RETURN_PERIOD_SCORE_SCALING: Record<ReturnPeriod, number> = {
+  aal: 1.0,
+  '10yr': 1.06,
+  '50yr': 1.17,
+  '100yr': 1.24,
+  '250yr': 1.33,
+  '500yr': 1.41,
+};
 
-  switch (scenario) {
-    case 'ssp119':
-      // Paris 1.5°C ambitious target: Peaks ~2040 then declines
-      return base + Math.min(decadeOffset * 0.04, 0.14);
-    case 'ssp126':
-      // Peaks around 2050 then stabilizes/slight decline
-      return base + Math.min(decadeOffset * 0.08, 0.28);
-    case 'ssp245':
-      // Moderate growth
-      return base + decadeOffset * 0.16;
-    case 'ssp370':
-      // Accelerated high growth
-      return base + decadeOffset * 0.27;
-    case 'ssp585':
-      // Exponential severe growth
-      return base + Math.pow(1.18, decadeOffset) * 0.35 + decadeOffset * 0.18;
-    default:
-      return 1.0;
-  }
+// Loss of a return-period event expressed as a multiple of AAL (typical cat-model
+// exceedance-curve shape: PML100 ~ 10-15x AAL).
+export const RETURN_PERIOD_LOSS_FACTOR: Record<ReturnPeriod, number> = {
+  aal: 1,
+  '10yr': 3.2,
+  '50yr': 8.5,
+  '100yr': 12.5,
+  '250yr': 18.5,
+  '500yr': 24,
+};
+
+// Soft saturation so scores keep differentiating instead of clipping at the cap.
+export function softCapScore(x: number): number {
+  if (x <= 60) return x;
+  return 60 + 39.5 * (1 - Math.exp(-(x - 60) / 40));
 }
 
-// CMIP6 IPCC AR6 Global Mean Sea Level Rise (GMSLR) Projections (meters above 2025 baseline)
+// IPCC AR6 WGI (SPM Table 1 / Ch.4) median global warming above 1850-1900, by decade.
+// 2025 ≈ +1.3 °C for every scenario. Values after 2025 are interpolated from the AR6 periods.
+const AR6_WARMING: Record<SSPScenario, number[]> = {
+  //        2025 2030 2040 2050 2060 2070 2080 2090
+  ssp119: [1.3, 1.45, 1.55, 1.6, 1.55, 1.5, 1.45, 1.4],
+  ssp126: [1.3, 1.45, 1.6, 1.7, 1.8, 1.8, 1.8, 1.8],
+  ssp245: [1.3, 1.45, 1.7, 2.0, 2.2, 2.4, 2.6, 2.7],
+  ssp370: [1.3, 1.45, 1.75, 2.1, 2.5, 2.9, 3.3, 3.6],
+  ssp585: [1.3, 1.5, 1.85, 2.4, 2.8, 3.3, 3.8, 4.3],
+};
+const DECADE_INDEX: Record<number, number> = { 2025: 0, 2030: 1, 2040: 2, 2050: 3, 2060: 4, 2070: 5, 2080: 6, 2090: 7 };
+
+/** Extra global warming (°C) above the 2025 baseline for a scenario and decade. */
+export function getWarmingAboveBaseline(scenario: SSPScenario, decade: Decade): number {
+  const row = AR6_WARMING[scenario];
+  if (!row) return 0;
+  const i = DECADE_INDEX[decade] ?? 0;
+  return Number((row[i] - row[0]).toFixed(2));
+}
+
+/** Hazard-intensity multiplier: 1.0 in 2025, +22% per °C of extra global warming. */
+export function getDecadeFactor(scenario: SSPScenario, decade: Decade): number {
+  return Number((1 + 0.22 * getWarmingAboveBaseline(scenario, decade)).toFixed(4));
+}
+
+// IPCC AR6 Table 9.9 GMSL medians (m, vs 1995-2014), rebased to 2025 (≈0.08 m already realised).
+const AR6_SLR: Record<SSPScenario, number[]> = {
+  //        2025  2030  2040  2050  2060  2070  2080  2090
+  ssp119: [0, 0.02, 0.06, 0.10, 0.14, 0.18, 0.22, 0.26],
+  ssp126: [0, 0.02, 0.06, 0.11, 0.15, 0.20, 0.25, 0.30],
+  ssp245: [0, 0.02, 0.07, 0.12, 0.18, 0.24, 0.31, 0.38],
+  ssp370: [0, 0.02, 0.07, 0.13, 0.20, 0.28, 0.36, 0.45],
+  ssp585: [0, 0.02, 0.08, 0.15, 0.22, 0.31, 0.41, 0.52],
+};
+/** Global mean sea-level rise in metres above the 2025 baseline (AR6 medians). */
 export function getDecadeSeaLevelRiseMeters(scenario: SSPScenario, decade: Decade): number {
-  const decadeOffset = Math.max(0, (decade - 2025) / 10); // 0 to 6.5
-  switch (scenario) {
-    case 'ssp119':
-      // Paris 1.5°C ambitious target: 0.10m by 2050, 0.28m by 2090
-      return Number((decadeOffset * 0.043).toFixed(2));
-    case 'ssp126':
-      // Paris 2.0°C target: 0.13m by 2050, 0.36m by 2090
-      return Number((decadeOffset * 0.055).toFixed(2));
-    case 'ssp245':
-      // Middle of the road: 0.18m by 2050, 0.56m by 2090
-      return Number((decadeOffset * 0.086).toFixed(2));
-    case 'ssp370':
-      // Regional rivalry / high emissions: 0.22m by 2050, 0.78m by 2090
-      return Number((decadeOffset * 0.120).toFixed(2));
-    case 'ssp585':
-      // Fossil-fueled development / extreme warming: 0.26m by 2050, 1.05m by 2090
-      return Number((decadeOffset * 0.161).toFixed(2));
-    default:
-      return 0.0;
-  }
+  const row = AR6_SLR[scenario];
+  if (!row) return 0;
+  return row[DECADE_INDEX[decade] ?? 0];
 }
 
 // ============================================================================
@@ -807,6 +853,167 @@ const GLOBAL_COASTLINE_ANCHORS: Array<{ lat: number; lon: number; name: string }
   { lat: -33.9, lon: 18.4, name: 'ZA-CapeTown' },
   { lat: -29.9, lon: 31.0, name: 'ZA-Durban' },
   { lat: -4.0, lon: 39.7, name: 'KE-Mombasa' },
+  // Round 4: Mediterranean, Black Sea and Caspian coasts
+  { lat: 39.45, lon: -0.32, name: 'ES-Valencia' },
+  { lat: 37.6, lon: -0.98, name: 'ES-Cartagena' },
+  { lat: 36.83, lon: -2.45, name: 'ES-Almeria' },
+  { lat: 36.72, lon: -4.42, name: 'ES-Malaga' },
+  { lat: 41.38, lon: 2.18, name: 'ES-Barcelona' },
+  { lat: 35.7, lon: -0.63, name: 'DZ-Oran' },
+  { lat: 36.77, lon: 3.06, name: 'DZ-Algiers' },
+  { lat: 36.9, lon: 7.75, name: 'DZ-Annaba' },
+  { lat: 36.8, lon: 10.2, name: 'TN-Tunis' },
+  { lat: 43.3, lon: 5.37, name: 'FR-Marseille' },
+  { lat: 44.4, lon: 8.93, name: 'IT-Genoa' },
+  { lat: 41.9, lon: 12.25, name: 'IT-Rome-coast' },
+  { lat: 38.1, lon: 13.35, name: 'IT-Palermo' },
+  { lat: 39.2, lon: 9.1, name: 'IT-Cagliari' },
+  { lat: 37.95, lon: 23.65, name: 'GR-Piraeus' },
+  { lat: 40.63, lon: 22.94, name: 'GR-Thessaloniki' },
+  { lat: 35.35, lon: 25.13, name: 'GR-Heraklion' },
+  { lat: 38.42, lon: 27.13, name: 'TR-Izmir' },
+  { lat: 36.88, lon: 30.7, name: 'TR-Antalya' },
+  { lat: 32.9, lon: 13.18, name: 'LY-Tripoli' },
+  { lat: 32.1, lon: 20.07, name: 'LY-Benghazi' },
+  { lat: 33.9, lon: 35.5, name: 'LB-Beirut' },
+  { lat: 32.82, lon: 34.98, name: 'IL-Haifa' },
+  { lat: 34.67, lon: 33.04, name: 'CY-Limassol' },
+  { lat: 35.9, lon: 14.5, name: 'MT-Valletta' },
+  { lat: 42.65, lon: 18.1, name: 'HR-Dubrovnik' },
+  { lat: 45.33, lon: 14.44, name: 'HR-Rijeka' },
+  { lat: 41.0, lon: 41.0, name: 'TR-Rize' },
+  { lat: 42.7, lon: 27.9, name: 'BG-Burgas' },
+  { lat: 46.48, lon: 30.73, name: 'UA-Odesa' },
+  { lat: 44.6, lon: 33.5, name: 'Sevastopol' },
+  { lat: 43.6, lon: 39.7, name: 'RU-Sochi' },
+  { lat: 40.4, lon: 49.9, name: 'AZ-Baku-Caspian' },
+  { lat: 37.47, lon: 49.46, name: 'IR-Anzali-Caspian' },
+  { lat: 43.65, lon: 51.2, name: 'KZ-Aktau-Caspian' },
+  { lat: 36.85, lon: -6.35, name: 'ES-Cadiz' },
+  { lat: 35.78, lon: -5.8, name: 'MA-Tangier' },
+  { lat: 33.6, lon: -7.6, name: 'MA-Casablanca' },
+  // Round 4: islands and coasts missed by the original port list
+  { lat: 21.3, lon: -157.9, name: 'HI-Honolulu' },
+  { lat: 19.7, lon: -155.1, name: 'HI-Hilo' },
+  { lat: 20.9, lon: -156.5, name: 'HI-Maui' },
+  { lat: 22.0, lon: -159.4, name: 'HI-Kauai' },
+  { lat: 13.45, lon: 144.75, name: 'Guam' },
+  { lat: 15.2, lon: 145.75, name: 'Saipan' },
+  { lat: 64.15, lon: -21.95, name: 'IS-Reykjavik' },
+  { lat: 65.7, lon: -18.1, name: 'IS-Akureyri' },
+  { lat: 63.4, lon: -20.3, name: 'IS-Vestmannaeyjar' },
+  { lat: -20.8, lon: 115.4, name: 'AU-BarrowIsland' },
+  { lat: -20.3, lon: 118.6, name: 'AU-PortHedland' },
+  { lat: -20.7, lon: 116.8, name: 'AU-Karratha' },
+  { lat: -17.95, lon: 122.2, name: 'AU-Broome' },
+  { lat: -12.45, lon: 130.85, name: 'AU-Darwin' },
+  { lat: -19.25, lon: 146.8, name: 'AU-Townsville' },
+  { lat: -16.9, lon: 145.8, name: 'AU-Cairns' },
+  { lat: -31.95, lon: 115.75, name: 'AU-Perth' },
+  { lat: -35.0, lon: 117.9, name: 'AU-Albany' },
+  { lat: -34.9, lon: 138.5, name: 'AU-Adelaide' },
+  { lat: 51.0, lon: 2.15, name: 'FR-Gravelines' },
+  { lat: 51.2, lon: -3.13, name: 'UK-HinkleyPoint' },
+  { lat: 51.5, lon: 1.4, name: 'UK-NorthForeland' },
+  { lat: 53.6, lon: 0.1, name: 'UK-Humber' },
+  { lat: 55.0, lon: -1.4, name: 'UK-Tyne' },
+  { lat: 57.15, lon: -2.05, name: 'UK-Aberdeen' },
+  { lat: 60.55, lon: 27.2, name: 'FI-Hamina' },
+  { lat: 60.15, lon: 24.95, name: 'FI-Helsinki' },
+  { lat: 59.45, lon: 24.75, name: 'EE-Tallinn' },
+  { lat: 59.95, lon: 30.2, name: 'RU-StPetersburg' },
+  { lat: 51.65, lon: 3.7, name: 'NL-Oosterschelde' },
+  { lat: 52.45, lon: 4.55, name: 'NL-IJmuiden' },
+  { lat: 53.45, lon: 6.8, name: 'NL-Eemshaven' },
+  { lat: 53.55, lon: 8.55, name: 'DE-Bremerhaven' },
+  { lat: 54.3, lon: 10.15, name: 'DE-Kiel' },
+  { lat: 35.6, lon: 139.8, name: 'JP-TokyoBay' },
+  { lat: 35.45, lon: 139.65, name: 'JP-Yokohama' },
+  { lat: 34.65, lon: 135.2, name: 'JP-Kobe' },
+  { lat: 33.6, lon: 130.4, name: 'JP-Fukuoka' },
+  { lat: 43.05, lon: 141.3, name: 'JP-Otaru' },
+  { lat: 38.25, lon: 141.05, name: 'JP-Sendai' },
+  { lat: 22.9, lon: -109.9, name: 'MX-CaboSanLucas' },
+  { lat: 23.2, lon: -106.45, name: 'MX-Mazatlan' },
+  { lat: 20.65, lon: -105.25, name: 'MX-PuertoVallarta' },
+  { lat: 16.85, lon: -99.9, name: 'MX-Acapulco' },
+  { lat: 32.5, lon: -117.1, name: 'MX-Tijuana' },
+  { lat: -25.95, lon: 32.6, name: 'MZ-Maputo' },
+  { lat: -19.8, lon: 34.85, name: 'MZ-Beira' },
+  { lat: -15.0, lon: 40.7, name: 'MZ-Nacala' },
+  { lat: -18.9, lon: 47.5, name: 'MG-east' },
+  { lat: -18.15, lon: 49.4, name: 'MG-Toamasina' },
+  { lat: -23.35, lon: 43.65, name: 'MG-Toliara' },
+  { lat: 4.17, lon: 73.5, name: 'MV-Male' },
+  { lat: -20.15, lon: 57.5, name: 'MU-PortLouis' },
+  { lat: -4.6, lon: 55.45, name: 'SC-Victoria' },
+  { lat: -21.1, lon: 55.5, name: 'RE-Reunion' },
+  { lat: -17.75, lon: 168.3, name: 'VU-PortVila' },
+  { lat: -18.15, lon: 178.45, name: 'FJ-Suva' },
+  { lat: -13.8, lon: -171.75, name: 'WS-Apia' },
+  { lat: -21.15, lon: -175.2, name: 'TO-Nukualofa' },
+  { lat: -22.25, lon: 166.45, name: 'NC-Noumea' },
+  { lat: -9.45, lon: 147.2, name: 'PG-PortMoresby' },
+  { lat: -36.85, lon: 174.75, name: 'NZ-Auckland' },
+  { lat: -41.3, lon: 174.8, name: 'NZ-Wellington' },
+  { lat: -43.5, lon: 172.7, name: 'NZ-Christchurch' },
+  { lat: 78.22, lon: 15.6, name: 'SJ-Longyearbyen' },
+  { lat: 64.18, lon: -51.7, name: 'GL-Nuuk' },
+  { lat: 63.75, lon: -68.5, name: 'CA-Iqaluit' },
+  { lat: 68.95, lon: 33.05, name: 'RU-Murmansk' },
+  { lat: 71.3, lon: -156.8, name: 'AK-Utqiagvik' },
+  { lat: 14.6, lon: 120.95, name: 'PH-Manila' },
+  { lat: 10.3, lon: 123.9, name: 'PH-Cebu' },
+  { lat: 7.1, lon: 125.6, name: 'PH-Davao' },
+  { lat: 18.95, lon: 72.82, name: 'IN-Mumbai' },
+  { lat: 13.08, lon: 80.29, name: 'IN-Chennai' },
+  { lat: 22.0, lon: 88.1, name: 'IN-SagarIsland' },
+  { lat: 17.7, lon: 83.3, name: 'IN-Vizag' },
+  { lat: 9.95, lon: 76.25, name: 'IN-Kochi' },
+  { lat: 15.4, lon: 73.8, name: 'IN-Goa' },
+  { lat: 22.5, lon: 70.0, name: 'IN-Jamnagar' },
+  { lat: 21.7, lon: 72.55, name: 'IN-Bharuch' },
+  { lat: 20.3, lon: 86.6, name: 'IN-Paradip' },
+  { lat: 25.25, lon: 55.3, name: 'AE-Dubai' },
+  { lat: 24.45, lon: 54.35, name: 'AE-AbuDhabi' },
+  { lat: 23.6, lon: 58.6, name: 'OM-Muscat' },
+  { lat: 26.2, lon: 50.6, name: 'BH-Manama' },
+  { lat: 25.3, lon: 51.55, name: 'QA-Doha' },
+  { lat: 29.35, lon: 47.95, name: 'KW-Kuwait' },
+  { lat: 21.5, lon: 39.15, name: 'SA-Jeddah' },
+  { lat: 26.45, lon: 50.2, name: 'SA-Dammam' },
+  { lat: 12.8, lon: 45.0, name: 'YE-Aden' },
+  { lat: 29.5, lon: 34.95, name: 'IL-Eilat' },
+  { lat: 27.25, lon: 33.8, name: 'EG-Hurghada' },
+  { lat: 31.2, lon: 29.9, name: 'EG-Alexandria' },
+  { lat: -12.05, lon: -77.15, name: 'PE-Callao' },
+  { lat: -23.65, lon: -70.4, name: 'CL-Antofagasta' },
+  { lat: -33.05, lon: -71.6, name: 'CL-Valparaiso' },
+  { lat: 18.1, lon: -15.95, name: 'MR-Nouakchott' },
+  { lat: -22.95, lon: 14.5, name: 'NA-WalvisBay' },
+  { lat: -22.7, lon: 14.55, name: 'NA-Swakopmund' },
+  { lat: -33.9, lon: 18.45, name: 'ZA-CapeTown' },
+  { lat: -29.85, lon: 31.05, name: 'ZA-Durban' },
+  { lat: 38.7, lon: -9.15, name: 'PT-Lisbon' },
+  { lat: 40.85, lon: 14.25, name: 'IT-Naples' },
+  { lat: 37.5, lon: 15.1, name: 'IT-Catania' },
+  { lat: 41.0, lon: 28.95, name: 'TR-Istanbul' },
+  { lat: 10.8, lon: 106.75, name: 'VN-HCMC-CanGio' },
+  { lat: 13.6, lon: 100.6, name: 'TH-BangkokGulf' },
+  { lat: -6.1, lon: 106.85, name: 'ID-Jakarta' },
+  { lat: -8.0, lon: 110.3, name: 'ID-Yogyakarta-coast' },
+  { lat: 31.2, lon: 121.9, name: 'CN-ShanghaiPudong' },
+  { lat: 22.3, lon: 114.2, name: 'HK' },
+  { lat: 29.95, lon: -90.05, name: 'US-NewOrleans-Lake' },
+  { lat: 25.77, lon: -80.13, name: 'US-MiamiBeach' },
+  { lat: 40.6, lon: -74.0, name: 'US-NYHarbor' },
+  { lat: 47.6, lon: -122.35, name: 'US-Seattle' },
+  { lat: 55.6, lon: 12.6, name: 'DK-Copenhagen' },
+  { lat: 57.7, lon: 11.9, name: 'SE-Gothenburg' },
+  { lat: 60.4, lon: 5.3, name: 'NO-Bergen' },
+  { lat: 59.9, lon: 10.75, name: 'NO-Oslofjord' },
+  { lat: 53.35, lon: -6.2, name: 'IE-Dublin' },
+  { lat: 45.45, lon: 12.35, name: 'IT-Venice' },
 ];
 
 // Great-circle Haversine Distance in Kilometers
@@ -839,16 +1046,41 @@ export function getDistanceToOceanKm(lat: number, lon: number): number {
 
 // Global Topographic Elevation Estimation (USGS GTOPO30 / SRTM 30m Hypsometric Model)
 export function estimateGlobalElevationMeters(lat: number, lon: number): number {
+  // 0. Major low-lying deltas and atolls (checked first: these override the regional plateaus)
+  const DELTAS: Array<[number, number, number, number, number]> = [
+    [30.6, 32.0, 120.5, 122.2, 4], // Yangtze delta (Shanghai)
+    [22.0, 23.3, 112.8, 114.5, 4], // Pearl River delta
+    [8.5, 11.2, 104.5, 107.0, 3], // Mekong delta (HCMC)
+    [13.0, 14.2, 100.0, 101.0, 2], // Chao Phraya (Bangkok)
+    [20.5, 24.5, 88.0, 91.5, 6], // Ganges-Brahmaputra delta (Kolkata, Dhaka)
+    [28.8, 30.3, -91.5, -89.0, 1], // Mississippi delta (New Orleans)
+    [30.0, 31.6, 29.8, 32.5, 5], // Nile delta
+    [-1.0, 7.5, 72.5, 74.0, 1], // Maldives
+    [16.0, 17.2, 95.6, 96.6, 4], // Irrawaddy (Yangon)
+    [-6.4, -6.0, 106.6, 107.1, 4], // North Jakarta coast
+    [24.5, 25.0, 66.8, 67.3, 8], // Karachi coast
+    [44.9, 45.6, 12.0, 12.7, 1], // Venice lagoon / Po delta
+  ];
+  for (const [a, b, c, d, e] of DELTAS) if (lat >= a && lat <= b && lon >= c && lon <= d) return e;
+  // Indo-Gangetic Plain (Delhi, Jaipur, Lucknow, Patna) and Kathmandu valley — must not fall into the Tibet box
+  if (lat >= 27.55 && lat <= 27.8 && lon >= 85.2 && lon <= 85.55) return 1350;
+  if (lat >= 24.0 && lat <= 30.6 && lon >= 72.0 && lon <= 88.5 && !(lat > 27.3 && lon > 80.0) && !(lat > 29.8 && lon > 77.3)) return lon < 76 ? 380 : 220;
+  if (lat >= 26.3 && lat <= 27.3 && lon >= 80.0 && lon <= 88.5) return 90; // Terai / North Bihar plain
+  // Amazon and West Siberian lowlands (huge, flat, far from the sea)
+  if (lat >= -10.0 && lat <= 2.0 && lon >= -70.0 && lon <= -50.0) return 80;
+  if (lat >= 55.0 && lat <= 70.0 && lon >= 60.0 && lon <= 90.0) return 100;
+
   // 1. Tibet, Himalayas & Qinghai Plateau (Asia)
   if (lat >= 26.0 && lat <= 38.0 && lon >= 75.0 && lon <= 104.0) {
     if (lat >= 27.90 && lat <= 28.08 && lon >= 86.85 && lon <= 87.05) return 8849; // Mount Everest Summit Massif
     if (lat >= 28.0 && lat <= 35.5 && lon >= 80.0 && lon <= 96.0) return 4550; // Central Tibetan Plateau
-    if (lat >= 27.0 && lat <= 30.5 && lon >= 84.0 && lon <= 90.0) return 4900; // High Himalayas
+    if (lat >= 27.8 && lat <= 30.5 && lon >= 84.0 && lon <= 90.0) return 4900; // High Himalayas
+    if (lat < 28.0) return 1500; // Himalayan foothills / mid-hills
     return 3200;
   }
 
   // 2. South American Andes Cordillera & Altiplano
-  if (lat >= -54.0 && lat <= 11.0 && lon >= -78.0 && lon <= -65.0) {
+  if (lat >= -54.0 && lat <= 11.0 && lon >= (lat > -6 && lat < 2 ? -81.0 : -78.0) && lon <= -65.0 && getDistanceToOceanKm(lat, lon) > 40) {
     if (lat >= -22.0 && lat <= -14.0 && lon >= -70.0 && lon <= -64.0) return 3850; // Bolivian Altiplano
     if (lat >= -1.0 && lat <= 6.0 && lon >= -77.5 && lon <= -73.0) return 2650; // Bogota/Quito highlands
     if (lat >= -35.0 && lat <= -28.0 && lon >= -71.0 && lon <= -68.0) return 2200; // Southern Andes
@@ -856,10 +1088,12 @@ export function estimateGlobalElevationMeters(lat: number, lon: number): number 
   }
 
   // 3. European Alps & Pyrenees
-  if (lat >= 45.5 && lat <= 47.8 && lon >= 6.0 && lon <= 14.5) return 1850; // Swiss/Austrian Alps
+  if (lat >= 46.85 && lat <= 47.8 && lon >= 5.9 && lon <= 9.7) return 450; // Swiss Plateau (Zürich, Basel, Bern)
+  if (lat >= 46.1 && lat <= 46.85 && lon >= 5.9 && lon <= 6.9) return 400; // Lake Geneva basin
+  if (lat >= 45.8 && lat <= 47.3 && lon >= 6.9 && lon <= 13.5) return 1700; // Swiss/Austrian Alps
   if (lat >= 42.0 && lat <= 43.2 && lon >= -1.0 && lon <= 3.0) return 1500; // Pyrenees
   if (lat >= 38.5 && lat <= 42.5 && lon >= -6.5 && lon <= -1.5) return 680; // Spanish Meseta Central (Madrid)
-  if (lat >= 51.0 && lat <= 53.5 && lon >= 3.2 && lon <= 7.2) return 1; // Netherlands / Flanders Lowlands
+  if (lat >= 51.3 && lat <= 53.5 && lon >= 3.3 && lon <= 7.0) return 1; // Netherlands polder lowlands
 
   // 4. North America Continental Hypsometry
   if (lat >= 24.5 && lat <= 49.5 && lon >= -125.0 && lon <= -66.5) {
@@ -946,6 +1180,27 @@ export function estimateGlobalElevationMeters(lat: number, lon: number): number 
 
   // 8. Singapore & Equatorial Sunda Lowlands
   if (lat >= 1.15 && lat <= 1.5 && lon >= 103.6 && lon <= 104.1) return 8;
+
+  // 9. Other major plateaus and highlands (Round 4)
+  if (lat >= 18.5 && lat <= 25.0 && lon >= -104.0 && lon <= -97.5) return 2000; // Mexican Plateau (Mexico City)
+  if (lat >= 6.0 && lat <= 14.5 && lon >= 36.0 && lon <= 40.5) return 2300; // Ethiopian Highlands
+  if (lat >= -4.0 && lat <= 1.0 && lon >= 34.5 && lon <= 38.0) return 1650; // Kenyan Highlands (Nairobi)
+  if (lat >= -27.5 && lat <= -24.5 && lon >= 26.0 && lon <= 30.5) return 1600; // Highveld (Johannesburg)
+  if (lat >= 31.0 && lat <= 37.0 && lon >= 62.0 && lon <= 71.5) return 1800; // Afghan highlands (Kabul)
+  if (lat >= 28.0 && lat <= 37.5 && lon >= 49.5 && lon <= 61.0) return 1200; // Iranian Plateau (Tehran)
+  if (lat >= 36.5 && lat <= 40.5 && lon >= 30.0 && lon <= 41.0) return 1000; // Anatolian Plateau (Ankara)
+  if (lat >= 12.0 && lat <= 22.5 && lon >= 73.8 && lon <= 81.5 && getDistanceToOceanKm(lat, lon) > 60) return 550; // Deccan Plateau (Bengaluru, Hyderabad, Pune)
+  if (lat >= 22.5 && lat <= 26.5 && lon >= 74.0 && lon <= 82.0) return 400; // Malwa / Central India
+  if (lat >= -24.0 && lat <= -12.0 && lon >= -52.0 && lon <= -43.0) return 950; // Brazilian Highlands (Brasília)
+  if (lat >= 18.0 && lat <= 30.0 && lon >= 40.0 && lon <= 50.0) return 600; // Najd plateau (Riyadh)
+  if (lat >= 3.0 && lat <= 5.0 && lon >= -76.5 && lon <= -73.5) return 2600; // Bogotá savanna
+
+  // Continental interiors are not at sea level: far from any coast, assume an inland plain.
+  const dCoast = getDistanceToOceanKm(lat, lon);
+  if (dCoast > 600) return 400;
+  if (dCoast > 250) return 200;
+  if (dCoast > 100) return 90;
+  if (dCoast <= 20) return 10; // coastal plain default (most coastal cities sit on low ground)
 
   // Default ocean-margin fallback
   return 25;
@@ -1044,8 +1299,8 @@ export function reverseGeocodeLocation(lat: number, lon: number): {
   }
 
   return {
-    city: `Site (${lat.toFixed(2)}°, ${lon.toFixed(2)}°)`,
-    country: 'International Coordinates',
+    city: 'Unknown city',
+    country: '',
     region: 'Global Terrestrial Grid',
   };
 }
@@ -1059,8 +1314,19 @@ export function checkIsAridZone(lat: number, lon: number): boolean {
   if (lat >= 14.0 && lat <= 32.0 && lon >= -15.0 && lon <= 35.0) return true;
   // Arabian Peninsula & Persian Gulf Interior
   if (lat >= 15.0 && lat <= 32.0 && lon >= 36.0 && lon <= 58.0) return true;
-  // Iranian Plateau & Central Asian Deserts (incl. Karakum, Kyzylkum, Taklamakan, Gobi)
-  if (lat >= 30.0 && lat <= 48.0 && lon >= 50.0 && lon <= 118.0) return true;
+  // Iranian Plateau, Karakum, Kyzylkum, Afghanistan, Baluchistan
+  if (lat >= 25.0 && lat <= 46.0 && lon >= 50.0 && lon <= 72.0) return true;
+  // Taklamakan, Tarim, Gobi (west/central) — excludes humid Sichuan and the North China Plain
+  if (lat >= 36.0 && lat <= 46.5 && lon >= 75.0 && lon <= 105.0) return true;
+  if (lat >= 40.0 && lat <= 46.0 && lon >= 105.0 && lon <= 112.0) return true;
+  // Thar Desert (Rajasthan / Sindh)
+  if (lat >= 24.0 && lat <= 30.5 && lon >= 68.0 && lon <= 75.5) return true;
+  // Kalahari, Namib & Karoo
+  if (lat >= -30.0 && lat <= -17.0 && lon >= 11.5 && lon <= 25.0) return true;
+  // Horn of Africa (Somalia, Djibouti, NE Kenya)
+  if (lat >= -1.0 && lat <= 12.5 && lon >= 40.0 && lon <= 51.5) return true;
+  // Patagonian steppe
+  if (lat >= -50.0 && lat <= -38.0 && lon >= -70.0 && lon <= -65.0) return true;
   // Atacama Desert
   if (lat >= -28.0 && lat <= -18.0 && lon >= -71.5 && lon <= -68.0) return true;
   // Australian Outback
@@ -1077,8 +1343,10 @@ export function checkIsTropicalCycloneBasin(lat: number, lon: number, distanceTo
   if (lat >= 10.0 && lat <= 43.0 && lon >= -100.0 && lon <= -55.0) return true;
   // Western Pacific Basin (Typhoons)
   if (lat >= 8.0 && lat <= 40.0 && lon >= 105.0 && lon <= 152.0) return true;
-  // North Indian Ocean Basin (Bay of Bengal / Arabian Sea)
-  if (lat >= 8.0 && lat <= 26.0 && lon >= 55.0 && lon <= 96.0 && distanceToOceanKm <= 200) return true;
+  // Eastern & Central North Pacific (Mexico Pacific coast, Hawaii)
+  if (lat >= 8.0 && lat <= 30.0 && lon >= -180.0 && lon < -100.0) return true;
+  // North Indian Ocean Basin (Bay of Bengal / Arabian Sea). The Persian Gulf (west of 56.5°E above 23°N) is excluded.
+  if (lat >= 8.0 && lat <= 26.0 && lon >= 55.0 && lon <= 96.0 && distanceToOceanKm <= 200 && !(lat > 23.0 && lon < 56.5)) return true;
   // South Pacific / Australian Basin
   if (lat >= -30.0 && lat <= -8.0 && lon >= 115.0 && lon <= 180.0) return true;
   // South Indian Ocean Basin (Madagascar / Mozambique)
@@ -1086,6 +1354,15 @@ export function checkIsTropicalCycloneBasin(lat: number, lon: number, distanceTo
 
   return false;
 }
+
+// Storm-surge inundation depth (m) at a site. rpFactor scales the surge height (1 = ~1-in-100yr).
+// Sea-level rise adds directly to the water level (no warming multiplier on top).
+export function coastalSurgeDepth(elev: number, distKm: number, cycloneBasin: boolean, slr: number, rpFactor: number): number {
+  if (distKm > 60 || elev > 30) return 0;
+  const surge = (cycloneBasin ? 4.5 : 2.8) * rpFactor;
+  return Math.max(0, surge + slr - Math.max(0, elev) * 0.65 - (distKm / 60) * 1.8);
+}
+export const coastalDepthScore = (depth: number) => (depth <= 0 ? 0 : Math.min(96, Math.max(12, Math.round(depth * 38))));
 
 // Spatial Physical Risk Baseline Estimation
 // Grounded strictly in geophysics, geodesic coastal proximity, and DEM hypsometry
@@ -1115,16 +1392,10 @@ export function calculateLocationBaselineRisk(
   let coastalAbsolute = 0.0; // meters
 
   if (distanceToOceanKm <= 60 && effectiveElevation <= 30 && effectiveElevation >= -10) {
-    // Lowland coastal corridor
-    const surgeCapacity = inCycloneBasin ? 4.5 : 2.8;
-    const netSurgeDepth = Math.max(
-      0.0,
-      surgeCapacity - Math.max(0, effectiveElevation) * 0.65 - (distanceToOceanKm / 60) * 1.8
-    );
-    if (netSurgeDepth > 0.05) {
-      coastalAbsolute = Number(netSurgeDepth.toFixed(2));
-      coastalScore = Math.min(96, Math.max(12, Math.round(netSurgeDepth * 38)));
-    }
+    const netSurgeDepth = coastalSurgeDepth(effectiveElevation, distanceToOceanKm, inCycloneBasin, 0, 1);
+    coastalAbsolute = Number(netSurgeDepth.toFixed(2));
+    // Sites just above today's surge reach still carry a residual (exposed) score
+    coastalScore = netSurgeDepth > 0.05 ? coastalDepthScore(netSurgeDepth) : effectiveElevation <= 8 ? 8 : 0;
   }
 
   // 5. TROPICAL CYCLONE LOGIC (Strict Physical Constraint):
@@ -1133,7 +1404,8 @@ export function calculateLocationBaselineRisk(
   let cycloneAbsolute = 0; // km/h peak wind
 
   if (inCycloneBasin) {
-    const coastalPeakWind = 220; // Category 4 baseline
+    // Peak 1-in-~100yr coastal wind is highest at 15-28° and falls off poleward (cooler SST)
+    const coastalPeakWind = absLat <= 28 ? 220 : Math.max(130, 220 - (absLat - 28) * 7);
     const decay = Math.exp(-distanceToOceanKm / 110);
     const decayedWind = Math.round(85 + (coastalPeakWind - 85) * decay);
     cycloneAbsolute = decayedWind;
@@ -1149,13 +1421,17 @@ export function calculateLocationBaselineRisk(
     // Arid plateau / desert interior: minimal perennial river flood
     fluvialScore = 5.5;
     fluvialAbsolute = 0.08;
-  } else if (distanceToOceanKm <= 35 && effectiveElevation < 15) {
-    // Lowland coastal river delta (e.g. Mississippi, Rhine, Yangtze)
+  } else if (absLat > 66) {
+    // Arctic: short snowmelt season, small catchments
+    fluvialScore = 18;
+    fluvialAbsolute = 0.3;
+  } else if (distanceToOceanKm <= 250 && effectiveElevation <= 6) {
+    // Lowland river delta (Mississippi, Rhine, Yangtze, Ganges)
     fluvialScore = 65;
     fluvialAbsolute = 1.65;
   } else if (effectiveElevation < 80) {
-    fluvialScore = 48;
-    fluvialAbsolute = 1.15;
+    fluvialScore = distanceToOceanKm <= 20 ? 34 : 48; // short coastal catchments flood less than big inland rivers
+    fluvialAbsolute = distanceToOceanKm <= 20 ? 0.7 : 1.15;
   } else {
     fluvialScore = 22;
     fluvialAbsolute = 0.35;
@@ -1166,13 +1442,17 @@ export function calculateLocationBaselineRisk(
   let pluvialScore = 38;
   let pluvialAbsolute = 85; // mm / 24h
 
-  if (isTropicalZone) {
-    pluvialScore = 72;
-    pluvialAbsolute = 165;
+  const coolDryCoast = distanceToOceanKm <= 80 && lat >= -35 && lat <= -4 && lon >= -82 && lon <= -69.5; // Peru-Chile coast
+  if (coolDryCoast) {
+    pluvialScore = 8;
+    pluvialAbsolute = 12;
   } else if (isArid) {
-    // Occasional monsoon cloudbursts in dry arroyos
+    // Occasional cloudbursts in dry wadis / arroyos (flash floods are real, but rare)
     pluvialScore = 32;
     pluvialAbsolute = 42;
+  } else if (isTropicalZone) {
+    pluvialScore = 72;
+    pluvialAbsolute = 165;
   } else {
     pluvialScore = 42;
     pluvialAbsolute = 95;
@@ -1222,13 +1502,43 @@ export function calculateLocationBaselineRisk(
   } else if (absLat <= 38) {
     heatScore = 34;
     heatAbsolute = 18;
+  } else if (absLat > 58) {
+    heatScore = 0;
+    heatAbsolute = 0;
+  } else if (absLat > 48) {
+    heatScore = 6;
+    heatAbsolute = 1;
+  }
+
+  // Lapse rate: ~6.5 °C cooler per km, so highland cities (Nairobi, Bogotá, Mexico City) rarely pass 35 °C
+  if (effectiveElevation > 900 && effectiveElevation <= 2200) {
+    const f = Math.max(0, 1 - (effectiveElevation - 900) / 1300);
+    heatScore = Math.round(heatScore * f);
+    heatAbsolute = Math.round(heatAbsolute * f);
+  }
+  // Cold-current upwelling coasts (Lima, Swakopmund, Antofagasta, Baja, Morocco): cool, dry, foggy
+  const coldCurrentCoast = distanceToOceanKm <= 80 && (
+    (lat >= -35 && lat <= -4 && lon >= -82 && lon <= -69.5) || (lat >= -32 && lat <= -12 && lon >= 8 && lon <= 16) ||
+    (lat >= 22 && lat <= 38 && lon >= -125 && lon <= -114) || (lat >= 15 && lat <= 32 && lon >= -18 && lon <= -9));
+  if (coldCurrentCoast) {
+    heatScore = Math.min(heatScore, 8);
+    heatAbsolute = Math.min(heatAbsolute, 2);
   }
 
   // 11. HEAT STRESS (Wet-Bulb Globe Temp WBGT °C):
   let heatStressScore = 24;
   let heatStressAbsolute = 26.5; // °C WBGT
 
-  if (isTropicalZone && distanceToOceanKm <= 100) {
+  if (coldCurrentCoast) {
+    heatStressScore = 14;
+    heatStressAbsolute = 23.0;
+  } else if (absLat > 55 || effectiveElevation > 3000) {
+    heatStressScore = 4;
+    heatStressAbsolute = 18.0;
+  } else if (absLat > 45) {
+    heatStressScore = 12;
+    heatStressAbsolute = 23.5;
+  } else if (isTropicalZone && distanceToOceanKm <= 100) {
     heatStressScore = 82;
     heatStressAbsolute = 32.4; // High humidity + heat
   } else if (isArid) {
@@ -1245,9 +1555,18 @@ export function calculateLocationBaselineRisk(
     // Glaciated / Alpine sub-zero regime
     coldScore = 98;
     coldAbsolute = 310;
+  } else if (absLat > 60 || (isHighLatitude && distanceToOceanKm > 400)) {
+    // Subarctic / continental interior (Yakutsk, Fairbanks, Winnipeg)
+    coldScore = 85;
+    coldAbsolute = 180;
   } else if (isHighLatitude) {
-    coldScore = 78;
-    coldAbsolute = 95;
+    // Maritime mid-latitude (Paris, London, Hamburg)
+    coldScore = 40;
+    coldAbsolute = 35;
+  } else if (effectiveElevation > 1400 && absLat < 15 && effectiveElevation < 3000) {
+    // Tropical highlands (Nairobi, Addis Ababa, Bogotá): mild "eternal spring", frost is rare
+    coldScore = 10;
+    coldAbsolute = 2;
   } else if (effectiveElevation > 1400) {
     // High-altitude radiative nighttime cooling (e.g. New Mexico plateau, Denver)
     coldScore = 38;
@@ -1261,7 +1580,13 @@ export function calculateLocationBaselineRisk(
   let wildfireScore = 22;
   let wildfireAbsolute = 12.0;
 
-  if (isArid) {
+  // Fire needs fuel: semi-arid scrub/grassland burns, hyper-arid sand and rock deserts barely do
+  const fuelledDryland = (lat >= 31 && lat <= 38 && lon >= -121 && lon <= -103) || (lat >= -35 && lat <= -15 && lon >= 113 && lon <= 153) ||
+    (lat >= 30 && lat <= 45 && lon >= -10 && lon <= 45);
+  if (isArid && !fuelledDryland) {
+    wildfireScore = 28;
+    wildfireAbsolute = 9.0;
+  } else if (isArid) {
     wildfireScore = 71;
     wildfireAbsolute = 43.5;
   } else if (absLat >= 30 && absLat <= 45 && distanceToOceanKm > 80) {
@@ -1311,6 +1636,15 @@ export function calculateLocationBaselineRisk(
     wildfire: { baseScore: wildfireScore, baseAbsolute: wildfireAbsolute },
     subsidence: { baseScore: subsidenceScore, baseAbsolute: subsidenceAbsolute },
     landslide: { baseScore: landslideScore, baseAbsolute: landslideAbsolute },
+    ...computeExtendedBaselines({
+      lat,
+      lon,
+      elevation: effectiveElevation,
+      distanceToOceanKm,
+      isArid,
+      waterStressAbs: waterStressAbsolute,
+      isTropicalZone,
+    }),
   };
 }
 
@@ -1324,21 +1658,32 @@ export function getRatingFromScore(score: number): RiskRating {
   return 'Catastrophic';
 }
 
+// Ordinal severity colours (green -> deep red). Always shown with a text label.
+export const RATING_ORDER: RiskRating[] = ['Very Low', 'Low', 'Moderate', 'High', 'Severe', 'Catastrophic'];
+export const RATING_HEX: Record<RiskRating, string> = {
+  'Very Low': '#10b981',
+  Low: '#84cc16',
+  Moderate: '#eab308',
+  High: '#f97316',
+  Severe: '#ef4444',
+  Catastrophic: '#be123c',
+};
+
 // Color coding for ratings
 export function getRatingColor(rating: RiskRating): string {
   switch (rating) {
     case 'Very Low':
-      return 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10';
+      return 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10';
     case 'Low':
-      return 'text-teal-300 border-teal-500/30 bg-teal-500/10';
+      return 'text-lime-300 border-lime-500/30 bg-lime-500/10';
     case 'Moderate':
-      return 'text-amber-400 border-amber-500/30 bg-amber-500/10';
+      return 'text-yellow-300 border-yellow-500/30 bg-yellow-500/10';
     case 'High':
-      return 'text-orange-400 border-orange-500/30 bg-orange-500/10';
+      return 'text-orange-300 border-orange-500/30 bg-orange-500/10';
     case 'Severe':
-      return 'text-red-400 border-red-500/30 bg-red-500/10';
+      return 'text-red-300 border-red-500/30 bg-red-500/10';
     case 'Catastrophic':
-      return 'text-rose-400 border-rose-500/30 bg-rose-500/10';
+      return 'text-rose-300 border-rose-500/40 bg-rose-600/15';
     default:
       return 'text-slate-400 border-slate-700 bg-slate-800';
   }
@@ -1347,12 +1692,144 @@ export function getRatingColor(rating: RiskRating): string {
 export function getRatingBadgeBg(rating: RiskRating): string {
   switch (rating) {
     case 'Very Low': return 'bg-emerald-500';
-    case 'Low': return 'bg-teal-500';
-    case 'Moderate': return 'bg-amber-500';
+    case 'Low': return 'bg-lime-500';
+    case 'Moderate': return 'bg-yellow-500';
     case 'High': return 'bg-orange-500';
     case 'Severe': return 'bg-red-500';
-    case 'Catastrophic': return 'bg-rose-600';
+    case 'Catastrophic': return 'bg-rose-700 text-white';
+    default: return 'bg-slate-500';
   }
+}
+
+// How each hazard's intensity responds to warming. dm = scenario decade factor (1.0 today), slr in metres.
+function hazardClimateFactor(hId: HazardType, dm: number, slr: number): number {
+  if (!HAZARD_TAXONOMY[hId].climateDriven) return extendedClimateFactor(hId, dm, slr) ?? 1;
+  const ext = extendedClimateFactor(hId, dm, slr);
+  if (ext !== undefined) return ext;
+  const k = (x: number) => 1 + (dm - 1) * x;
+  switch (hId) {
+    case 'extreme_cold': return Math.pow(dm, -0.6); // cold weakens as the climate warms
+    case 'coastal_flood': return 1; // handled physically through sea-level rise
+    case 'subsidence': return 1; // driven by groundwater pumping, not warming
+    case 'landslide': return k(0.3);
+    case 'tropical_cyclone': return k(0.4);
+    case 'water_stress': return k(0.5);
+    case 'drought': return k(0.7);
+    case 'fluvial_flood': return k(0.6);
+    default: return dm;
+  }
+}
+
+// Physical upper bounds per unit, applied to every branch (modelled and live).
+const UNIT_CAP: Partial<Record<HazardType, number>> = {
+  extreme_heat: 365, extreme_cold: 365, heat_stress: 36, water_stress: 100, wildfire: 150, landslide: 10,
+  tropical_cyclone: 315, extratropical_storm: 300, hail: 150, tornado: 10, avalanche: 10, glacial_lake_outburst: 10,
+  sand_dust_storm: 365, coastal_flood: 12, fluvial_flood: 8, pluvial_flood: 600, subsidence: 60, tsunami: 30, earthquake: 2.5,
+};
+function clampUnit(hId: HazardType, v: number): number {
+  if (!Number.isFinite(v)) return 0;
+  if (hId === 'drought') return Math.max(-4, Math.min(0, v));
+  const cap = UNIT_CAP[hId];
+  return Math.max(0, cap === undefined ? v : Math.min(cap, v));
+}
+// Surge-height factor per return period (1.0 = 1-in-100yr)
+const SURGE_RP: Record<ReturnPeriod, number> = { aal: 0.55, '10yr': 0.75, '50yr': 0.92, '100yr': 1, '250yr': 1.08, '500yr': 1.14 };
+
+// ---- Live data (open APIs) -------------------------------------------------------------
+// CMIP6 HighResMIP runs on Open-Meteo track ~SSP5-8.5. "Now" = 2015-2024, "mid" = 2041-2050.
+// Other scenarios/decades are pattern-scaled by their warming factor relative to SSP5-8.5 @ 2045.
+// SSP5-8.5 2041-2050 is ≈ +0.83 °C above the 2025 baseline (AR6 median).
+const DM_REF = 0.22 * 0.83;
+/** Scale the model's now→mid change by the warming ratio. Capped at 2.5× so noise is not
+ *  extrapolated far beyond the data; `sign` enforces physics
+ *  (+1 = must not fall with warming, -1 = must not rise). */
+const patternScale = (now: number | undefined, mid: number | undefined, dm: number, sign: 1 | -1 | 0 = 0) => {
+  if (now === undefined || !Number.isFinite(now)) return undefined;
+  if (mid === undefined || !Number.isFinite(mid)) return Math.max(0, now);
+  const r = Math.min(2.5, Math.max(0, (dm - 1) / DM_REF));
+  let v = now + (mid - now) * r;
+  if (sign > 0) v = Math.max(now, v);
+  if (sign < 0) v = Math.min(now, v);
+  return Math.max(0, v);
+};
+
+/** Returns a live-data-driven {abs, score} for a hazard, or undefined to use the modelled baseline. */
+function liveHazard(hId: HazardType, live: LiveSiteData | undefined, dm: number, elevation: number): { abs: number; score: number } | undefined {
+  if (!live) return undefined;
+  switch (hId) {
+    case 'extreme_heat': {
+      const v = patternScale(live.heatDays35Now, live.heatDays35Mid, dm, 1);
+      return v === undefined ? undefined : { abs: v, score: 100 * (1 - Math.exp(-v / 40)) };
+    }
+    case 'extreme_cold': {
+      const v = patternScale(live.frostDaysNow, live.frostDaysMid, dm, -1);
+      return v === undefined ? undefined : { abs: v, score: 100 * (1 - Math.exp(-v / 70)) };
+    }
+    case 'pluvial_flood': {
+      const v = patternScale(live.rx1dayNowMm, live.rx1dayMidMm, dm);
+      return v === undefined ? undefined : { abs: v, score: 100 * (1 - Math.exp(-v / 180)) };
+    }
+    case 'extratropical_storm': {
+      // Daily-max wind from a ~25 km model is not a 3-second gust and under-reads storms badly,
+      // so it is shown in the live-data panel but does not override the modelled windstorm score.
+      void live.windMaxNowKmh;
+      return undefined;
+    }
+    case 'earthquake': {
+      const n = live.quakesM5Within150km;
+      return n === undefined ? undefined : { abs: n, score: Math.min(97, 35 * Math.log10(1 + n)) };
+    }
+    case 'fluvial_flood': {
+      const q = live.riverMaxDischargeM3s;
+      if (q === undefined) return undefined;
+      const elevF = elevation < 15 ? 1.15 : elevation < 80 ? 1 : 0.6;
+      return { abs: q * Math.sqrt(dm), score: Math.min(95, 18 * Math.log10(1 + q) * elevF * Math.sqrt(dm)) };
+    }
+    default:
+      return undefined;
+  }
+}
+
+/** Families combine their hazards with a soft maximum so adding minor perils never dilutes the score. */
+function familyScore(scores: number[]): number {
+  const s = scores.filter((x) => x > 0).sort((a, b) => b - a);
+  if (!s.length) return 0;
+  const tail = s.slice(1).reduce((t, x) => t + (x / 100) * 0.15, 0);
+  return Math.min(99, s[0] + (100 - s[0]) * Math.min(0.5, tail));
+}
+
+// AAL damage ratio from the average-year composite score (convex: risk concentrates at the top end).
+function aalDamageRatioFromScore(aalComposite: number): number {
+  return Math.min(0.05, Math.max(0.0003, AAL_COEFF * Math.pow(Math.max(0, aalComposite) / 100, AAL_EXP)));
+}
+const AAL_COEFF = 0.0155;
+const AAL_EXP = 1.6;
+const COMPOSITE_CURVE = 1.5;
+
+function activeDamageRatio(aalRatio: number, returnPeriod: ReturnPeriod): number {
+  return Math.min(0.85, aalRatio * RETURN_PERIOD_LOSS_FACTOR[returnPeriod]);
+}
+
+const LIVE_UNITS: Partial<Record<HazardType, string>> = {
+  earthquake: 'M5+ quakes ≤150 km since 1975',
+  fluvial_flood: 'm³/s peak river flow',
+  extratropical_storm: 'km/h peak gust (est.)',
+};
+
+const EXCEEDANCE_PROBABILITY: Record<ReturnPeriod, number> = {
+  aal: 1.0, '10yr': 0.1, '50yr': 0.02, '100yr': 0.01, '250yr': 0.004, '500yr': 0.002,
+};
+
+export interface FamilyResult {
+  family: HazardFamily;
+  score: number;
+  weight: number;
+  topHazard: HazardType | null;
+}
+
+/** Elevation used by the model: measured DEM when live data is attached, else the entered / estimated value. */
+export function siteElevation(asset: Asset): number {
+  return asset.liveData?.demElevationM ?? asset.elevationMeters ?? estimateGlobalElevationMeters(asset.latitude, asset.longitude);
 }
 
 // Core Assessment Engine: Computes complete physical & financial risk for an asset
@@ -1362,244 +1839,219 @@ export function assessAssetRisk(
   decade: Decade = 2050,
   returnPeriod: ReturnPeriod = '100yr'
 ): AssetRiskAssessment {
-  const baselines = calculateLocationBaselineRisk(
-    asset.latitude,
-    asset.longitude,
-    asset.elevationMeters
-  );
-
+  if (!Number.isFinite(Number(asset.latitude)) || !Number.isFinite(Number(asset.longitude))) {
+    throw new Error(`Site "${asset.name}" has invalid coordinates`);
+  }
+  const elevation = siteElevation(asset);
+  const baselines = calculateLocationBaselineRisk(asset.latitude, asset.longitude, elevation);
   const vulnerabilityWeights = getAssetVulnerabilityWeights(asset.assetType);
   const decadeMultiplier = getDecadeFactor(scenario, decade);
+  const slrNow = getDecadeSeaLevelRiseMeters(scenario, decade);
   const returnPeriodMultiplier = RETURN_PERIOD_MULTIPLIERS[returnPeriod];
+  const value = Math.max(0, Number(asset.replacementValueUsd) || 0);
+  const live = asset.liveData;
+  const dT = (decadeMultiplier - 1) / 0.22; // extra °C of global warming vs 2025
+  const distCoast = getDistanceToOceanKm(asset.latitude, asset.longitude);
+  const cycloneBasin = checkIsTropicalCycloneBasin(asset.latitude, asset.longitude, distCoast);
+  const surgeDepth = (slr: number, rp: ReturnPeriod) => coastalSurgeDepth(elevation, distCoast, cycloneBasin, slr, SURGE_RP[rp]);
+  const maxSlr = getDecadeSeaLevelRiseMeters(scenario, decade);
+
+  const isZero = (hId: HazardType) => {
+    if (liveHazard(hId, live, 1, elevation)) return false;
+    const b = baselines[hId];
+    if (hId === 'coastal_flood') return b.baseScore <= 0 && surgeDepth(maxSlr, '100yr') <= 0.05;
+    // Drought uses signed SPEI (negative = deficit), so a negative absolute is not "no hazard".
+    return b.baseScore <= 0 || (hId !== 'drought' && b.baseAbsolute <= 0);
+  };
+  const weightOf = (hId: HazardType) => vulnerabilityWeights[hId] ?? 1.0;
+
+  const hazardScore = (hId: HazardType, dm: number, slr: number, rp: ReturnPeriod): number => {
+    const lv = liveHazard(hId, live, dm, elevation);
+    if (!lv && isZero(hId)) return 0;
+    const base = lv
+      ? lv.score
+      : hId === 'coastal_flood'
+        ? Math.max(baselines.coastal_flood.baseScore, coastalDepthScore(surgeDepth(slr, '100yr')))
+        : baselines[hId].baseScore * hazardClimateFactor(hId, dm, slr);
+    const raw = base * RETURN_PERIOD_SCORE_SCALING[rp] * (0.85 + weightOf(hId) * 0.15);
+    if (raw <= 0.5) return 0;
+    return Math.min(99.5, Math.max(2.0, softCapScore(raw)));
+  };
+
+  const familiesAt = (dm: number, slr: number, rp: ReturnPeriod): FamilyResult[] =>
+    HAZARD_FAMILIES.map((f) => {
+      const members = ALL_HAZARDS.filter((h) => HAZARD_TAXONOMY[h].family === f.id);
+      const scores = members.map((h) => hazardScore(h, dm, slr, rp));
+      const live = members.filter((_, i) => scores[i] > 0);
+      const weight = live.length ? Math.max(...live.map(weightOf)) : 1;
+      const top = live.length ? members[scores.indexOf(Math.max(...scores))] : null;
+      return { family: f.id, score: familyScore(scores), weight, topHazard: top };
+    });
+
+  const compositeAt = (dm: number, slr: number, rp: ReturnPeriod): number => {
+    const fams = familiesAt(dm, slr, rp);
+    const w = fams.reduce((t, f) => t + f.weight, 0);
+    if (w <= 0) return 0;
+    const mean = fams.reduce((t, f) => t + f.score * f.weight, 0) / w;
+    // Calibration curve: a weighted mean of six family maxima sits higher than the old 12-hazard
+    // mean, so it is mapped back so that rating bands keep their meaning (and spread is restored).
+    return Math.min(99, Math.max(0, Number((100 * Math.pow(mean / 100, COMPOSITE_CURVE)).toFixed(1))));
+  };
 
   const hazardResults: Partial<Record<HazardType, HazardMetricResult>> = {};
-  let weightedScoreSum = 0;
-  let totalWeight = 0;
-  let highestScore = -1;
+  const contributions: Partial<Record<HazardType, number>> = {};
+  let contributionTotal = 0;
+  let highestScore = 0;
   let primaryHazard: HazardType = 'drought';
+  const rps: ReturnPeriod[] = ['aal', '10yr', '50yr', '100yr', '250yr', '500yr'];
 
   for (const hId of ALL_HAZARDS) {
     const meta = HAZARD_CATALOG[hId];
     const base = baselines[hId];
-    const vWeight = vulnerabilityWeights[hId] || 1.0;
+    const vWeight = weightOf(hId);
+    const zero = isZero(hId);
+    const cf = hazardClimateFactor(hId, decadeMultiplier, slrNow);
+    const score = hazardScore(hId, decadeMultiplier, slrNow, returnPeriod);
+    const lv = liveHazard(hId, live, decadeMultiplier, elevation);
+    const lvNow = liveHazard(hId, live, 1, elevation);
 
-    // Strict Zero-Hazard Check (e.g. Coastal Flood or Cyclone in inland desert)
-    // Note: Drought uses signed SPEI indices where negative indicates extreme deficit, so baseAbsolute < 0 is not zero-hazard.
-    const isZeroHazard = base.baseScore <= 0 || (hId !== 'drought' && base.baseAbsolute <= 0);
-
-    const rawScore = isZeroHazard
-      ? 0.0
-      : Math.min(
-          99.5,
-          Math.max(
-            2.0,
-            base.baseScore *
-              decadeMultiplier *
-              (returnPeriod === 'aal' ? 1.0 : returnPeriodMultiplier * 0.75) *
-              (0.85 + vWeight * 0.15)
-          )
-        );
-
-    // Projected absolute metric in scientific units
-    let absoluteValue = 0.0;
-    const slrMeters = hId === 'coastal_flood' ? getDecadeSeaLevelRiseMeters(scenario, decade) : 0;
-
-    if (!isZeroHazard) {
-      if (hId === 'drought') {
-        absoluteValue = base.baseAbsolute * decadeMultiplier;
-      } else if (hId === 'tropical_cyclone') {
-        // Physical aerodynamic scaling: Logarithmic Gumbel scaling with thermodynamic MPI cap (315 km/h / 195 mph)
-        const windScaling = 1 + (returnPeriodMultiplier - 1) * 0.22;
-        absoluteValue = Math.min(315, Math.round(base.baseAbsolute * Math.min(1.25, decadeMultiplier) * windScaling));
-      } else if (hId === 'coastal_flood') {
-        // Incorporate CMIP6 Sea Level Rise (SLR) temporal curve into extreme coastal surge depth
-        const slrWeight = returnPeriod === 'aal' ? 0.6 : 1.0;
-        absoluteValue = Number((base.baseAbsolute * decadeMultiplier + slrMeters * slrWeight).toFixed(2));
-      } else {
-        absoluteValue =
-          base.baseAbsolute *
-          decadeMultiplier *
-          (returnPeriod === 'aal' ? 1.0 : returnPeriodMultiplier * 0.85);
+    // Return-period intensity table in scientific units (single source of truth)
+    const returnPeriodValues = {} as Record<ReturnPeriod, number>;
+    for (const rp of rps) {
+      let v = 0;
+      if (!zero) {
+        const rpM = RETURN_PERIOD_MULTIPLIERS[rp];
+        // Gumbel-style intensity growth: depth/heat/etc. grow sub-linearly with return period
+        const rpScale = 1 + (rpM - 1) * 0.5;
+        const b0 = base.baseAbsolute;
+        if (lv) {
+          v = hId === 'earthquake' ? lv.abs : lv.abs * (rp === 'aal' ? 1 : rpScale);
+        } else {
+          // Each hazard responds to warming (dT, °C above 2025) with its own physical sensitivity
+          switch (hId) {
+            case 'coastal_flood': v = surgeDepth(slrNow, rp); break; // surge + SLR − ground level
+            case 'sea_level_rise': v = slrNow; break;
+            case 'tropical_cyclone': v = b0 * (1 + 0.025 * dT) * (1 + (rpM - 1) * 0.22); break; // ~+5% peak wind at +2 °C
+            case 'extratropical_storm': v = b0 * (1 + 0.01 * dT) * (1 + (rpM - 1) * 0.18); break;
+            case 'drought': v = b0 * (1 + 0.15 * dT) * (1 + (rpM - 1) * 0.2); break;
+            case 'water_stress': v = b0 + 4 * dT; break; // chronic, percentage points
+            case 'extreme_heat': v = b0 * (1 + 0.4 * dT) * rpScale + (b0 > 0 ? 3 * dT : 0); break;
+            case 'heat_stress': v = b0 + 0.9 * dT + 1.2 * (rpM - 1); break; // additive °C WBGT
+            case 'extreme_cold': v = b0 * Math.max(0, 1 - 0.12 * dT) * rpScale; break;
+            case 'pluvial_flood': v = b0 * Math.pow(1.07, dT) * rpScale; break; // Clausius-Clapeyron ~7%/°C
+            case 'fluvial_flood': v = b0 * (1 + 0.08 * dT) * rpScale; break;
+            case 'wildfire': v = b0 * (1 + 0.12 * dT) * rpScale; break;
+            case 'subsidence': v = b0; break; // pumping-driven, constant
+            case 'landslide': v = b0 * (1 + 0.07 * dT) * rpScale; break;
+            case 'earthquake': case 'volcano': v = b0; break; // fixed reference return period (labelled)
+            default:
+              v = HAZARD_TAXONOMY[hId].onset === 'chronic' ? b0 * cf : b0 * cf * rpScale;
+          }
+        }
+        v = clampUnit(hId, v);
       }
+      returnPeriodValues[rp] = Number(v.toFixed(hId === 'earthquake' && !lv ? 3 : 2));
     }
+    const absoluteValue = returnPeriodValues[returnPeriod];
 
-    // Absolute return period values calculation
-    const returnPeriodValues: Record<ReturnPeriod, number> = isZeroHazard
-      ? { aal: 0, '10yr': 0, '50yr': 0, '100yr': 0, '250yr': 0, '500yr': 0 }
-      : hId === 'tropical_cyclone'
-      ? {
-          aal: Number(Math.min(315, base.baseAbsolute * Math.min(1.25, decadeMultiplier)).toFixed(2)),
-          '10yr': Number(Math.min(315, base.baseAbsolute * Math.min(1.25, decadeMultiplier) * (1 + (RETURN_PERIOD_MULTIPLIERS['10yr'] - 1) * 0.22)).toFixed(2)),
-          '50yr': Number(Math.min(315, base.baseAbsolute * Math.min(1.25, decadeMultiplier) * (1 + (RETURN_PERIOD_MULTIPLIERS['50yr'] - 1) * 0.22)).toFixed(2)),
-          '100yr': Number(Math.min(315, base.baseAbsolute * Math.min(1.25, decadeMultiplier) * (1 + (RETURN_PERIOD_MULTIPLIERS['100yr'] - 1) * 0.22)).toFixed(2)),
-          '250yr': Number(Math.min(315, base.baseAbsolute * Math.min(1.25, decadeMultiplier) * (1 + (RETURN_PERIOD_MULTIPLIERS['250yr'] - 1) * 0.22)).toFixed(2)),
-          '500yr': Number(Math.min(315, base.baseAbsolute * Math.min(1.25, decadeMultiplier) * (1 + (RETURN_PERIOD_MULTIPLIERS['500yr'] - 1) * 0.22)).toFixed(2)),
-        }
-      : hId === 'coastal_flood'
-      ? {
-          aal: Number((base.baseAbsolute * decadeMultiplier + slrMeters * 0.6).toFixed(2)),
-          '10yr': Number((base.baseAbsolute * decadeMultiplier * RETURN_PERIOD_MULTIPLIERS['10yr'] * 0.9 + slrMeters * 0.8).toFixed(2)),
-          '50yr': Number((base.baseAbsolute * decadeMultiplier * RETURN_PERIOD_MULTIPLIERS['50yr'] * 0.9 + slrMeters * 0.9).toFixed(2)),
-          '100yr': Number((base.baseAbsolute * decadeMultiplier * RETURN_PERIOD_MULTIPLIERS['100yr'] * 0.9 + slrMeters * 1.0).toFixed(2)),
-          '250yr': Number((base.baseAbsolute * decadeMultiplier * RETURN_PERIOD_MULTIPLIERS['250yr'] * 0.9 + slrMeters * 1.05).toFixed(2)),
-          '500yr': Number((base.baseAbsolute * decadeMultiplier * RETURN_PERIOD_MULTIPLIERS['500yr'] * 0.9 + slrMeters * 1.1).toFixed(2)),
-        }
-      : {
-          aal: Number((base.baseAbsolute * decadeMultiplier).toFixed(2)),
-          '10yr': Number(
-            (base.baseAbsolute * decadeMultiplier * RETURN_PERIOD_MULTIPLIERS['10yr'] * 0.9).toFixed(2)
-          ),
-          '50yr': Number(
-            (base.baseAbsolute * decadeMultiplier * RETURN_PERIOD_MULTIPLIERS['50yr'] * 0.9).toFixed(2)
-          ),
-          '100yr': Number(
-            (base.baseAbsolute * decadeMultiplier * RETURN_PERIOD_MULTIPLIERS['100yr'] * 0.9).toFixed(2)
-          ),
-          '250yr': Number(
-            (base.baseAbsolute * decadeMultiplier * RETURN_PERIOD_MULTIPLIERS['250yr'] * 0.9).toFixed(2)
-          ),
-          '500yr': Number(
-            (base.baseAbsolute * decadeMultiplier * RETURN_PERIOD_MULTIPLIERS['500yr'] * 0.9).toFixed(2)
-          ),
-        };
+    // Event damage ratio (non-linear sigmoid fragility curve)
+    const sigmoidDamage = 1 / (1 + Math.exp(-6 * (score / 100 - 0.45)));
+    const damageRatio = score === 0 ? 0 : Math.min(0.95, Math.max(0.001, sigmoidDamage * vWeight * 0.35));
 
-    // Physical damage ratio calculation (Non-linear sigmoid vulnerability function)
-    const normalizedIntensity = rawScore / 100;
-    const sigmoidDamage = 1 / (1 + Math.exp(-6 * (normalizedIntensity - 0.45)));
-    const damageRatio = isZeroHazard
-      ? 0.0
-      : Math.min(0.95, Math.max(0.001, sigmoidDamage * vWeight * 0.35));
+    const contribution = score * vWeight;
+    contributions[hId] = contribution;
+    contributionTotal += contribution;
 
-    // Financial loss in USD for this specific hazard
-    const expectedLossUsd = isZeroHazard
-      ? 0
-      : Math.round(asset.replacementValueUsd * damageRatio * 0.3);
-
-    const deltaPercent = isZeroHazard ? 0.0 : Number(((decadeMultiplier - 1) * 100).toFixed(1));
-    const rating = isZeroHazard ? 'Very Low' : getRatingFromScore(rawScore);
+    const nowScore = lvNow ? lvNow.score : base.baseScore;
+    const delta = lv && lvNow ? (lvNow.abs > 0 ? lv.abs / lvNow.abs - 1 : 0) : cf - 1;
 
     hazardResults[hId] = {
       hazardId: hId,
       hazardName: meta.name,
-      score: Number(rawScore.toFixed(1)),
-      rating,
-      absoluteValue: Number(absoluteValue.toFixed(2)),
-      unit: meta.unit,
-      baselineValue: Number(base.baseAbsolute.toFixed(2)),
-      deltaPercent,
+      score: Number(score.toFixed(1)),
+      rating: score === 0 ? 'Very Low' : getRatingFromScore(score),
+      absoluteValue,
+      unit: lv ? LIVE_UNITS[hId] ?? meta.unit : meta.unit,
+      baselineValue: Number((lvNow ? lvNow.abs : base.baseAbsolute).toFixed(2)),
+      deltaPercent: score === 0 || !HAZARD_TAXONOMY[hId].climateDriven ? 0 : Number((delta * 100).toFixed(1)),
       damageRatio: Number(damageRatio.toFixed(4)),
-      expectedLossUsd,
+      expectedLossUsd: 0, // allocated below so hazard losses reconcile with the asset total
       returnPeriodValues,
-      exceedanceProbability:
-        returnPeriod === 'aal'
-          ? 1.0
-          : returnPeriod === '10yr'
-          ? 0.1
-          : returnPeriod === '50yr'
-          ? 0.02
-          : returnPeriod === '100yr'
-          ? 0.01
-          : returnPeriod === '250yr'
-          ? 0.004
-          : 0.002,
-      confidenceScore: 'High',
+      exceedanceProbability: EXCEEDANCE_PROBABILITY[returnPeriod],
+      confidenceScore: lv ? 'High' : nowScore > 0 ? 'Medium' : 'Low',
     };
 
-    if (rawScore > 0) {
-      weightedScoreSum += rawScore * vWeight;
-      if (rawScore > highestScore) {
-        highestScore = rawScore;
-        primaryHazard = hId;
-      }
+    if (score > highestScore) {
+      highestScore = score;
+      primaryHazard = hId;
     }
-    // Total weight always includes hazard capacity to ensure composite score is mathematically normalized
-    totalWeight += vWeight;
   }
 
-  // Composite Asset Score & Financials
-  const compositeScore = totalWeight > 0
-    ? Math.min(99.0, Math.max(0.0, Number((weightedScoreSum / totalWeight).toFixed(1))))
-    : 0.0;
+  // Composite scores: selected return period, and the unconditional average year
+  const families = familiesAt(decadeMultiplier, slrNow, returnPeriod);
+  const compositeScore = compositeAt(decadeMultiplier, slrNow, returnPeriod);
   const compositeRating = getRatingFromScore(compositeScore);
+  const aalComposite = returnPeriod === 'aal' ? compositeScore : compositeAt(decadeMultiplier, slrNow, 'aal');
 
-  // 1. Unconditional Average Annual Loss (AAL): Annual frequency-severity integral (RP multiplier = 1.0)
-  const aalDamageRatio = Math.min(
-    0.85,
-    Math.max(
-      0.005,
-      Number(((compositeScore / 100) * 0.32 * 0.6).toFixed(4))
-    )
-  );
-  const aalUsd = Math.round(asset.replacementValueUsd * aalDamageRatio);
+  // 1. AAL — independent of the selected return period
+  const aalDamageRatio = Number(aalDamageRatioFromScore(aalComposite).toFixed(5));
+  const aalUsd = Math.round(value * aalDamageRatio);
 
-  // 2. Return-Period Specific Exceedance Loss / Probable Maximum Loss (PML):
-  const totalDamageRatio = Math.min(
-    0.85,
-    Math.max(
-      0.005,
-      Number(((compositeScore / 100) * 0.32 * (returnPeriodMultiplier * 0.6)).toFixed(4))
-    )
-  );
-  const periodExceedanceLossUsd = Math.round(asset.replacementValueUsd * totalDamageRatio);
-  const totalExpectedAnnualLossUsd = periodExceedanceLossUsd;
+  // 2. Return-period event loss (PML)
+  const totalDamageRatio = Number(activeDamageRatio(aalDamageRatio, returnPeriod).toFixed(5));
+  const periodExceedanceLossUsd = Math.round(value * totalDamageRatio);
+  const totalExpectedAnnualLossUsd = returnPeriod === 'aal' ? aalUsd : periodExceedanceLossUsd;
   const lossMetricType: 'AAL' | 'PML' = returnPeriod === 'aal' ? 'AAL' : 'PML';
   const lossTypeLabel = returnPeriod === 'aal'
     ? 'Average Annual Loss (AAL)'
-    : `${returnPeriod.toUpperCase()} Exceedance Loss (PML)`;
+    : `1-in-${returnPeriod.replace('yr', '')}-year Event Loss (PML)`;
 
-  const valueAtRisk95 = Math.round(totalExpectedAnnualLossUsd * 2.1);
-  const valueAtRisk995 = Math.round(totalExpectedAnnualLossUsd * 4.6);
+  // Allocate the active loss across hazards in proportion to their weighted score contribution
+  for (const hId of ALL_HAZARDS) {
+    const share = contributionTotal > 0 ? (contributions[hId] ?? 0) / contributionTotal : 0;
+    hazardResults[hId]!.expectedLossUsd = Math.round(totalExpectedAnnualLossUsd * share);
+  }
 
-  // Downtime days and business interruption loss
+  // Tail risk is a property of the loss distribution, so it is anchored on AAL (not on the
+  // selected return period). 1-in-20 ~ 5.5x AAL, 1-in-200 ~ 17x AAL, never above 85% of value.
+  const valueAtRisk95 = Math.round(Math.min(value * 0.85, aalUsd * 5.5));
+  const valueAtRisk995 = Math.round(Math.min(value * 0.85, aalUsd * 17));
+
+  // Downtime per event and business interruption
   const downtimeDays = Math.round((compositeScore / 100) * 45 * returnPeriodMultiplier * 0.4);
-  const dailyRevenueFraction = 0.0012; // 0.12% of replacement value per day
-  const businessInterruptionLossUsd = Math.round(downtimeDays * asset.replacementValueUsd * dailyRevenueFraction);
+  const businessInterruptionLossUsd = Math.round(downtimeDays * value * 0.0012);
 
-  // Multi-decade trajectory projection
-  const decades: Decade[] = [2025, 2030, 2040, 2050, 2060, 2070, 2080, 2090];
-  const decadeTrajectory = decades.map((d) => {
-    const factor = getDecadeFactor(scenario, d);
-    const dScore = Math.min(99, Math.max(5, Number((compositeScore * (factor / decadeMultiplier)).toFixed(1))));
-    const dLoss = Math.round(totalExpectedAnnualLossUsd * (factor / decadeMultiplier));
-    const dDamage = Math.min(0.9, Number((totalDamageRatio * (factor / decadeMultiplier)).toFixed(4)));
-    return {
-      decade: d,
-      compositeScore: dScore,
-      expectedLossUsd: dLoss,
-      damageRatio: dDamage,
-    };
-  });
-
-  // Scenario comparisons for 2050
-  const scenarioComparison: Record<SSPScenario, { compositeScore: number; expectedLossUsd: number }> = {
-    ssp119: {
-      compositeScore: Number((compositeScore * 0.58).toFixed(1)),
-      expectedLossUsd: Math.round(totalExpectedAnnualLossUsd * 0.52),
-    },
-    ssp126: {
-      compositeScore: Number((compositeScore * 0.72).toFixed(1)),
-      expectedLossUsd: Math.round(totalExpectedAnnualLossUsd * 0.65),
-    },
-    ssp245: {
-      compositeScore: Number((compositeScore).toFixed(1)),
-      expectedLossUsd: totalExpectedAnnualLossUsd,
-    },
-    ssp370: {
-      compositeScore: Number(Math.min(99, compositeScore * 1.25).toFixed(1)),
-      expectedLossUsd: Math.round(totalExpectedAnnualLossUsd * 1.38),
-    },
-    ssp585: {
-      compositeScore: Number(Math.min(99, compositeScore * 1.55).toFixed(1)),
-      expectedLossUsd: Math.round(totalExpectedAnnualLossUsd * 1.82),
-    },
+  const lossFor = (s: SSPScenario, d: Decade) => {
+    const dm = getDecadeFactor(s, d);
+    const slr = getDecadeSeaLevelRiseMeters(s, d);
+    const sc = compositeAt(dm, slr, returnPeriod);
+    const aal = Number(aalDamageRatioFromScore(returnPeriod === 'aal' ? sc : compositeAt(dm, slr, 'aal')).toFixed(5));
+    const ratio = Number((returnPeriod === 'aal' ? aal : activeDamageRatio(aal, returnPeriod)).toFixed(5));
+    return { score: sc, ratio };
   };
 
-  // Adaptation & Resilience ROI recommendations
+  // Multi-decade trajectory: fully recomputed per decade (not a linear rescale)
+  const decades: Decade[] = [2025, 2030, 2040, 2050, 2060, 2070, 2080, 2090];
+  const decadeTrajectory = decades.map((d) => {
+    const r = lossFor(scenario, d);
+    return { decade: d, compositeScore: r.score, expectedLossUsd: Math.round(value * r.ratio), damageRatio: Number(r.ratio.toFixed(5)) };
+  });
+
+  // Scenario comparison at the selected decade: every scenario computed on its own pathway
+  const scenarioComparison = {} as Record<SSPScenario, { compositeScore: number; expectedLossUsd: number }>;
+  (['ssp119', 'ssp126', 'ssp245', 'ssp370', 'ssp585'] as SSPScenario[]).forEach((s) => {
+    const r = lossFor(s, decade);
+    scenarioComparison[s] = { compositeScore: r.score, expectedLossUsd: Math.round(value * r.ratio) };
+  });
+
+  // Adaptation ROI is an annual cash-flow question, so it uses AAL (not a tail event loss)
   const recommendedMeasures = getAdaptationRecommendations(asset.assetType, primaryHazard);
-  const estimatedCapexUsd = Math.round(asset.replacementValueUsd * 0.035); // ~3.5% capex
-  const annualLossReductionUsd = Math.round(totalExpectedAnnualLossUsd * 0.45); // 45% risk mitigation
-  const paybackPeriodYears = Number((estimatedCapexUsd / (annualLossReductionUsd || 1)).toFixed(1));
-  const netResilienceBenefitUsd = Math.round(annualLossReductionUsd * 15 - estimatedCapexUsd); // 15-yr horizon
+  const estimatedCapexUsd = Math.round(value * 0.035);
+  const annualLossReductionUsd = Math.round(aalUsd * 0.45);
+  const paybackPeriodYears = annualLossReductionUsd > 0
+    ? Number((estimatedCapexUsd / annualLossReductionUsd).toFixed(1))
+    : 999;
+  const netResilienceBenefitUsd = Math.round(annualLossReductionUsd * 15 - estimatedCapexUsd);
 
   return {
     asset,
@@ -1622,6 +2074,8 @@ export function assessAssetRisk(
     hazardResults: hazardResults as Record<HazardType, HazardMetricResult>,
     primaryHazard,
     primaryHazardScore: Number(highestScore.toFixed(1)),
+    familyScores: families.map((f) => ({ family: f.family, score: Number(f.score.toFixed(1)), topHazard: f.topHazard })),
+    usesLiveData: !!live,
     decadeTrajectory,
     scenarioComparison,
     adaptationRoi: {
@@ -1633,6 +2087,7 @@ export function assessAssetRisk(
     },
   };
 }
+
 
 // Generate tailored adaptation measures based on asset type and primary hazard
 function getAdaptationRecommendations(assetType: string, hazard: HazardType): string[] {
@@ -1649,7 +2104,7 @@ function getAdaptationRecommendations(assetType: string, hazard: HazardType): st
       return [
         'Construct bioswale retention detention basins with redundant sump pumps',
         'Elevate ground-floor sensitive equipment and IT racks by 1.2 meters',
-        'Install perimeter perimeter flood walls rated for 1-in-250 year return level',
+        'Install perimeter flood walls rated for 1-in-250 year return level',
         'Implement automated SCADA flood sensor monitoring with telemetry shutoff',
       ];
     case 'extreme_heat':
@@ -1699,6 +2154,8 @@ function getAdaptationRecommendations(assetType: string, hazard: HazardType): st
         'Install dual-fuel heating backups and cold-weather lubricants for mechanical drives',
         'Insulate building envelopes to prevent catastrophic freeze-thaw spalling',
       ];
+    default:
+      return extendedAdaptation(hazard) ?? ['Commission a site-specific engineering resilience survey'];
   }
 }
 
@@ -1718,8 +2175,8 @@ export function computePortfolioSummary(assessments: AssetRiskAssessment[]): Por
       var95Usd: 0,
       var995Usd: 0,
       spatialClusteringIndex: 0,
-      copulaVaRMultiplier95: 1.75,
-      copulaVaRMultiplier995: 3.85,
+      copulaVaRMultiplier95: 1.6,
+      copulaVaRMultiplier995: 6.0,
       copulaCorrelationStatus: 'Highly Diversified',
       topExposedHazard: 'coastal_flood',
       hazardBreakdown: [],
@@ -1753,19 +2210,15 @@ export function computePortfolioSummary(assessments: AssetRiskAssessment[]): Por
 
   const distributionByCategory: Record<string, { count: number; totalLossUsd: number; avgScore: number }> = {};
 
-  const hazardScoreSums: Record<HazardType, number> = {
-    coastal_flood: 0, fluvial_flood: 0, pluvial_flood: 0, drought: 0,
-    water_stress: 0, extreme_heat: 0, heat_stress: 0, extreme_cold: 0,
-    tropical_cyclone: 0, wildfire: 0, subsidence: 0, landslide: 0,
-  };
+  const hazardScoreSums = Object.fromEntries(ALL_HAZARDS.map((h) => [h, 0])) as Record<HazardType, number>;
   const hazardLossSums: Record<HazardType, number> = { ...hazardScoreSums };
   const hazardHighCount: Record<HazardType, number> = { ...hazardScoreSums };
 
   assessments.forEach((a) => {
-    totalValue += a.asset.replacementValueUsd;
+    totalValue += Math.max(0, Number(a.asset.replacementValueUsd) || 0); // same sanitising as assessAssetRisk
     totalLoss += a.totalExpectedAnnualLossUsd;
-    totalAal += a.aalUsd || a.totalExpectedAnnualLossUsd;
-    totalPeriodExceedance += a.periodExceedanceLossUsd || a.totalExpectedAnnualLossUsd;
+    totalAal += a.aalUsd ?? a.totalExpectedAnnualLossUsd;
+    totalPeriodExceedance += a.periodExceedanceLossUsd ?? a.totalExpectedAnnualLossUsd;
     sumScore += a.compositeScore;
     sumDamageRatio += a.totalDamageRatio;
 
@@ -1796,47 +2249,66 @@ export function computePortfolioSummary(assessments: AssetRiskAssessment[]): Por
   const count = assessments.length;
   const portfolioRiskScore = Number((sumScore / count).toFixed(1));
   const portfolioRating = getRatingFromScore(portfolioRiskScore);
-  const averageDamageRatio = Number((sumDamageRatio / count).toFixed(4));
+  // Value-weighted, so a $10B fab is not averaged equally with a $50M warehouse
+  const averageDamageRatio = totalValue > 0
+    ? Number((totalLoss / totalValue).toFixed(5))
+    : Number((sumDamageRatio / count).toFixed(5));
   const lossMetricType: 'AAL' | 'PML' = assessments[0]?.lossMetricType || 'PML';
 
-  // Spatial Gaussian Copula Tail Dependence Model:
-  // Evaluates pairwise geographic proximity decay (750 km correlation length) + shared primary hazard co-tail dependence
-  let spatialClusteringIndex = 0.15;
-  if (count > 1) {
-    let pairSum = 0;
-    let pairs = 0;
+  // Spatial tail dependence between sites: correlation decays with distance (750 km length)
+  // plus a co-tail bonus when two sites share the same main hazard.
+  const rhoOf = (i: number, j: number) => {
+    const d = haversineDistanceKm(assessments[i].asset.latitude, assessments[i].asset.longitude, assessments[j].asset.latitude, assessments[j].asset.longitude);
+    const sameHazard = assessments[i].primaryHazard === assessments[j].primaryHazard ? 0.2 : 0;
+    return Math.min(1, Math.exp(-d / 750) + sameHazard);
+  };
+
+  // Portfolio VaR by correlated aggregation of site VaRs:  VaR_p² = Σ_i Σ_j ρ_ij · VaR_i · VaR_j
+  //  - one site            → equals that site's VaR
+  //  - adding a site       → never lowers portfolio VaR (all terms are ≥ 0)
+  //  - fully correlated    → sum of site VaRs; uncorrelated → root-sum-of-squares
+  const v95 = assessments.map((a) => a.valueAtRisk95);
+  const v995 = assessments.map((a) => a.valueAtRisk995);
+  let q95 = v95.reduce((t, v) => t + v * v, 0);
+  let q995 = v995.reduce((t, v) => t + v * v, 0);
+  let pairSum = 0;
+  let pairs = 0;
+  if (count <= 3000) { // exact O(n²): ~4.5M pairs is still well under a second
     for (let i = 0; i < count; i++) {
       for (let j = i + 1; j < count; j++) {
-        const d = haversineDistanceKm(
-          assessments[i].asset.latitude,
-          assessments[i].asset.longitude,
-          assessments[j].asset.latitude,
-          assessments[j].asset.longitude
-        );
-        const sameHazard = assessments[i].primaryHazard === assessments[j].primaryHazard ? 0.20 : 0.0;
-        const rho = Math.min(1.0, Math.exp(-d / 750) + sameHazard);
-        pairSum += rho;
+        const r = rhoOf(i, j);
+        q95 += 2 * r * v95[i] * v95[j];
+        q995 += 2 * r * v995[i] * v995[j];
+        pairSum += r;
         pairs++;
       }
     }
-    spatialClusteringIndex = pairs > 0 ? Number((pairSum / pairs).toFixed(3)) : 0.15;
+  } else {
+    // Large uploads: estimate the average correlation from a deterministic sample
+    const stride = Math.ceil(count / 400);
+    for (let i = 0; i < count; i += stride) for (let j = i + stride; j < count; j += stride) { pairSum += rhoOf(i, j); pairs++; }
+    const rbar = pairs ? pairSum / pairs : 0;
+    const s95 = v95.reduce((t, v) => t + v, 0);
+    const s995 = v995.reduce((t, v) => t + v, 0);
+    q95 += rbar * (s95 * s95 - q95);
+    q995 += rbar * (s995 * s995 - q995);
   }
+  const spatialClusteringIndex = pairs > 0 ? Number((pairSum / pairs).toFixed(3)) : 1;
 
   let copulaCorrelationStatus: 'Highly Diversified' | 'Moderately Diversified' | 'Regionally Clustered' | 'Highly Concentrated' = 'Highly Diversified';
-  if (spatialClusteringIndex >= 0.75) {
-    copulaCorrelationStatus = 'Highly Concentrated';
-  } else if (spatialClusteringIndex >= 0.50) {
+  if (count < 5 || spatialClusteringIndex >= 0.75) {
+    copulaCorrelationStatus = 'Highly Concentrated'; // too few sites to diversify
+  } else if (spatialClusteringIndex >= 0.5) {
     copulaCorrelationStatus = 'Regionally Clustered';
   } else if (spatialClusteringIndex >= 0.25) {
     copulaCorrelationStatus = 'Moderately Diversified';
   }
 
-  const copulaVaRMultiplier95 = Number((1.75 + 0.95 * spatialClusteringIndex).toFixed(2));
-  const copulaVaRMultiplier995 = Number((3.85 + 1.95 * spatialClusteringIndex).toFixed(2));
-
-  // Value at Risk scaled by dynamic Copula spatial correlation
-  const var95Usd = Math.round(totalLoss * copulaVaRMultiplier95);
-  const var995Usd = Math.round(totalLoss * copulaVaRMultiplier995);
+  const var95Usd = Math.round(Math.min(totalValue, Math.sqrt(q95)));
+  const var995Usd = Math.round(Math.min(totalValue, Math.sqrt(q995)));
+  // Effective tail multipliers on AAL (for display)
+  const copulaVaRMultiplier95 = totalAal > 0 ? Number((var95Usd / totalAal).toFixed(2)) : 0;
+  const copulaVaRMultiplier995 = totalAal > 0 ? Number((var995Usd / totalAal).toFixed(2)) : 0;
 
   // Normalize category average scores
   Object.keys(distributionByCategory).forEach((k) => {
@@ -1888,16 +2360,14 @@ export function computePortfolioSummary(assessments: AssetRiskAssessment[]): Por
 
 // Utility formatting
 export function formatCurrencyUsd(amount: number): string {
-  if (amount >= 1e9) {
-    return `$${(amount / 1e9).toFixed(2)}B`;
-  }
-  if (amount >= 1e6) {
-    return `$${(amount / 1e6).toFixed(2)}M`;
-  }
-  if (amount >= 1e3) {
-    return `$${(amount / 1e3).toFixed(0)}K`;
-  }
-  return `$${amount.toLocaleString()}`;
+  if (!Number.isFinite(amount)) return '$0';
+  const sign = amount < 0 ? '-' : '';
+  const a = Math.abs(amount);
+  if (a >= 1e12) return `${sign}$${(a / 1e12).toFixed(2)}T`;
+  if (a >= 1e9) return `${sign}$${(a / 1e9).toFixed(2)}B`;
+  if (a >= 1e6) return `${sign}$${(a / 1e6).toFixed(2)}M`;
+  if (a >= 1e3) return `${sign}$${(a / 1e3).toFixed(0)}K`;
+  return `${sign}$${Math.round(a).toLocaleString()}`;
 }
 
 // Global CMIP6 Spatial Point Diagnostic Query
@@ -1917,7 +2387,6 @@ export interface PointClimateDiagnostic {
   detectedLocation: string;
   koppenClimateClass: string;
   koppenDescription: string;
-  modelEnsembleConsensusPercent: number;
   primaryRiskHazard: HazardType;
   compositePhysicalRiskScore: number;
   compositeRating: RiskRating;
@@ -1933,38 +2402,21 @@ export function queryLocationClimateData(
   resolution: SpatialResolution = '1km'
 ): PointClimateDiagnostic {
   // Compute Grid Cell Center according to selected Spatial Downscaling Resolution
-  let gridLat = lat;
-  let gridLon = lon;
-  let gridKm = 1.0;
-
-  switch (resolution) {
-    case '25km':
-      gridLat = Math.round(lat * 4) / 4;
-      gridLon = Math.round(lon * 4) / 4;
-      gridKm = 25.0;
-      break;
-    case '10km':
-      gridLat = Math.round(lat * 10) / 10;
-      gridLon = Math.round(lon * 10) / 10;
-      gridKm = 10.0;
-      break;
-    case '1km':
-      gridLat = Math.round(lat * 100) / 100;
-      gridLon = Math.round(lon * 100) / 100;
-      gridKm = 1.0;
-      break;
-    case '90m':
-      gridLat = Math.round(lat * 1100) / 1100;
-      gridLon = Math.round(lon * 1100) / 1100;
-      gridKm = 0.09;
-      break;
-  }
+  // Grid step in degrees (90 m = 3 arc-seconds = 1/1200°). Cells are square in degrees, so their
+  // east-west width shrinks with cos(latitude) — exactly like the source rasters.
+  const STEP: Record<string, [number, number]> = { '25km': [0.25, 25], '10km': [0.1, 10], '1km': [0.01, 1], '90m': [1 / 1200, 0.09] };
+  const [step, gridKm] = STEP[resolution] ?? STEP['1km'];
+  const snap = (x: number) => Math.round(x / step) * step;
+  const gridLat = Math.max(-90 + step / 2, Math.min(90 - step / 2, snap(lat)));
+  let gridLon = snap(lon);
+  if (gridLon > 180) gridLon -= 360;
+  if (gridLon < -180) gridLon += 360;
 
   const resMeta = SPATIAL_RESOLUTIONS[resolution];
 
   // Resolve scientific topographic elevation & distance to ocean
-  const elevationMeters = estimateGlobalElevationMeters(lat, lon);
-  const distanceToOceanKm = getDistanceToOceanKm(lat, lon);
+  const elevationMeters = estimateGlobalElevationMeters(gridLat, gridLon);
+  const distanceToOceanKm = getDistanceToOceanKm(gridLat, gridLon);
   const geo = reverseGeocodeLocation(lat, lon);
   const isArid = checkIsAridZone(lat, lon);
   const absLat = Math.abs(lat);
@@ -1992,16 +2444,17 @@ export function queryLocationClimateData(
   } else if (absLat >= 15 && absLat <= 23.5) {
     koppenClass = 'Aw';
     koppenDesc = 'Tropical Savanna (Pronounced dry season, extreme heat waves)';
-  } else if (absLat > 32 && absLat <= 50 && (lon >= -10 && lon <= 25)) {
+  } else if (absLat > 32 && absLat <= 58 && (lon >= -10 && lon <= (absLat > 50 ? 12 : 25))) {
     koppenClass = 'Cfb';
     koppenDesc = 'Temperate Oceanic (Moderate thermal range, persistent river runoff)';
+  } else if (absLat > 66) {
+    koppenClass = 'ET';
+    koppenDesc = 'Polar Tundra (Short cool summer, long frozen winter)';
   } else if (absLat > 50) {
     koppenClass = 'Dfb';
     koppenDesc = 'Humid Continental / Subarctic (Severe freeze spells, snowpack melt)';
   }
 
-  // Model consensus rate across CESM2, GFDL-ESM4, UKESM1, MPI-ESM1, EC-Earth3
-  const consensus = Math.min(98, Math.max(82, Math.round(88 + (absLat % 10))));
 
   // Create benchmark asset to leverage assessment engine
   const dummyAsset: Asset = {
@@ -2011,8 +2464,8 @@ export function queryLocationClimateData(
     parentEntity: 'IPCC AR6 / CMIP6 Ensemble',
     assetType: 'Hyperscale Cloud Data Center (>50MW)',
     category: 'Data Center & Telecom',
-    latitude: lat,
-    longitude: lon,
+    latitude: gridLat, // assess the grid-cell centre, so every point in a cell gets the same result
+    longitude: gridLon,
     city: geo.city,
     country: geo.country,
     replacementValueUsd: 100000000,
@@ -2023,10 +2476,10 @@ export function queryLocationClimateData(
 
   const assessment = assessAssetRisk(dummyAsset, scenario, decade, returnPeriod);
 
-  const halfDeg = (gridKm / 111) / 2;
+  const halfDeg = step / 2; // the drawn cell always contains the clicked point
   const gridCellBounds: [[number, number], [number, number]] = [
-    [Number((gridLat - halfDeg).toFixed(4)), Number((gridLon - halfDeg).toFixed(4))],
-    [Number((gridLat + halfDeg).toFixed(4)), Number((gridLon + halfDeg).toFixed(4))],
+    [Number((gridLat - halfDeg).toFixed(5)), Number((gridLon - halfDeg).toFixed(5))],
+    [Number((gridLat + halfDeg).toFixed(5)), Number((gridLon + halfDeg).toFixed(5))],
   ];
 
   return {
@@ -2045,7 +2498,6 @@ export function queryLocationClimateData(
     detectedLocation: `${geo.city}, ${geo.country}`,
     koppenClimateClass: koppenClass,
     koppenDescription: koppenDesc,
-    modelEnsembleConsensusPercent: consensus,
     primaryRiskHazard: assessment.primaryHazard,
     compositePhysicalRiskScore: assessment.compositeScore,
     compositeRating: assessment.compositeRating,

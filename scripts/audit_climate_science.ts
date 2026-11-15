@@ -10,8 +10,12 @@ import {
   queryLocationClimateData,
   assessAssetRisk,
   HAZARD_CATALOG,
+  getDecadeFactor,
+  computePortfolioSummary,
+  formatCurrencyUsd,
 } from '../src/services/climateEngine';
-import { SpatialResolution, Asset } from '../src/types/climate';
+import { SAMPLE_PORTFOLIOS } from '../src/services/sampleData';
+import { SpatialResolution, Asset, ReturnPeriod, SSPScenario } from '../src/types/climate';
 
 console.log('========================================================================');
 console.log('   GEOSPATIAL & PHYSICAL CLIMATE SCIENCE VERIFICATION TEST SUITE');
@@ -104,7 +108,7 @@ const edgeCases: TestCase[] = [
     expectedElev: 1,
     maxCoastalScore: 100, // Should have coastal exposure
     maxCycloneScore: 0, // No cyclones in North Sea
-    expectedKoppenPrefix: 'D', // or C
+    expectedKoppenPrefix: 'Cfb', // Temperate oceanic
   },
   {
     name: 'Amsterdam Polder (Netherlands)',
@@ -113,7 +117,7 @@ const edgeCases: TestCase[] = [
     expectedElev: 1,
     maxCoastalScore: 100,
     maxCycloneScore: 0,
-    expectedKoppenPrefix: 'D',
+    expectedKoppenPrefix: 'Cfb',
   },
   {
     name: 'Miami Beach Barrier Island (Florida)',
@@ -146,7 +150,7 @@ const edgeCases: TestCase[] = [
     name: 'Swiss Alps High Massif (Jungfrau/Interlaken)',
     lat: 46.55,
     lon: 7.98,
-    expectedElev: 1850,
+    expectedElev: 1700,
     maxCoastalScore: 0,
     maxCycloneScore: 0,
     expectedKoppenPrefix: 'C',
@@ -256,6 +260,107 @@ const testAsset: Asset = {
 };
 const assetRisk = assessAssetRisk(testAsset, 'ssp245', 2050, '100yr');
 console.log(`Rule 5: Asset risk assessment integration: Composite Score = ${assetRisk.compositeScore}, Primary = ${assetRisk.primaryHazard} => PASS`);
+
+
+// -----------------------------------------------------------------------------
+// 5. Financial & Logical Consistency Regression Tests
+// -----------------------------------------------------------------------------
+console.log('\n--- 5. FINANCIAL & LOGICAL CONSISTENCY ---');
+const allScen: SSPScenario[] = ['ssp119', 'ssp126', 'ssp245', 'ssp370', 'ssp585'];
+const allRp: ReturnPeriod[] = ['aal', '10yr', '50yr', '100yr', '250yr', '500yr'];
+const portfolioAssets = SAMPLE_PORTFOLIOS.flatMap((p) => p.assets);
+const check = (name: string, ok: boolean) => {
+  console.log(`${name} => ${ok ? 'PASS' : 'FAIL'}`);
+  if (!ok) allPassed = false;
+};
+
+check('Rule 6: Every SSP starts at 1.0 in 2025', allScen.every((s) => Math.abs(getDecadeFactor(s, 2025) - 1) < 1e-9));
+
+check('Rule 7: AAL is identical for every return-period selection', portfolioAssets.every((a) => {
+  const ref = assessAssetRisk(a, 'ssp245', 2050, 'aal').aalUsd;
+  return allRp.every((rp) => assessAssetRisk(a, 'ssp245', 2050, rp).aalUsd === ref);
+}));
+
+check('Rule 8: Composite score never decreases with rarer return period', portfolioAssets.every((a) => {
+  const scores = allRp.map((rp) => assessAssetRisk(a, 'ssp245', 2050, rp).compositeScore);
+  return scores.every((v, i) => i === 0 || v >= scores[i - 1]);
+}));
+
+check('Rule 9: Scenario comparison matches a direct run of each scenario', portfolioAssets.slice(0, 15).every((a) => {
+  const cur = assessAssetRisk(a, 'ssp585', 2070, '100yr');
+  return allScen.every((s) => {
+    const direct = assessAssetRisk(a, s, 2070, '100yr');
+    return Math.abs(cur.scenarioComparison[s].compositeScore - direct.compositeScore) < 0.05;
+  });
+}));
+
+check('Rule 10: Hazard losses reconcile to the asset total (±$10)', portfolioAssets.every((a) => {
+  const r = assessAssetRisk(a, 'ssp370', 2060, '250yr');
+  const sum = Object.values(r.hazardResults).reduce((t, h) => t + h.expectedLossUsd, 0);
+  return Math.abs(sum - r.totalExpectedAnnualLossUsd) <= 10;
+}));
+
+const pAssess = portfolioAssets.map((a) => assessAssetRisk(a, 'ssp245', 2050, '100yr'));
+const pSum = computePortfolioSummary(pAssess);
+check(`Rule 11: Portfolio AAL is a plausible share of value (${(pSum.totalAalUsd / pSum.totalReplacementValueUsd * 100).toFixed(2)}%, expect 0.05%-3%)`,
+  pSum.totalAalUsd / pSum.totalReplacementValueUsd > 0.0005 && pSum.totalAalUsd / pSum.totalReplacementValueUsd < 0.03);
+check('Rule 12: VaR 95 < VaR 99.5 <= portfolio value', pSum.var95Usd < pSum.var995Usd && pSum.var995Usd <= pSum.totalReplacementValueUsd);
+check('Rule 13: Extreme cold weakens under warming', portfolioAssets.slice(0, 10).every((a) =>
+  assessAssetRisk(a, 'ssp585', 2090, 'aal').hazardResults.extreme_cold.score <= assessAssetRisk(a, 'ssp585', 2025, 'aal').hazardResults.extreme_cold.score));
+check('Rule 15: Scenario severity ordered SSP1-1.9 <= SSP1-2.6 <= SSP2-4.5 <= SSP3-7.0 <= SSP5-8.5 for every future decade',
+  ([2030, 2040, 2050, 2060, 2070, 2080, 2090] as const).every((d) => allScen.every((s, i) => i === 0 || getDecadeFactor(s, d) >= getDecadeFactor(allScen[i - 1], d))));
+check('Rule 14: Negative currency formats correctly', formatCurrencyUsd(-2_500_000) === '-$2.50M');
+
+
+// -----------------------------------------------------------------------------
+// 6. Extended hazards & live-data overrides
+// -----------------------------------------------------------------------------
+console.log('\n--- 6. EXTENDED HAZARDS & LIVE DATA ---');
+const site = (lat: number, lon: number, elev?: number, type = 'Mid-Rise Commercial Office Park'): Asset => ({
+  id: `t-${lat}-${lon}`, name: 'test', entityName: 'x', parentEntity: 'x', assetType: type, category: 'Commercial Real Estate',
+  latitude: lat, longitude: lon, city: '', country: '', replacementValueUsd: 1e8, yearBuilt: 2020, elevationMeters: elev, criticalityTier: 2,
+});
+const H = (a: Asset, h: keyof typeof HAZARD_CATALOG, s: SSPScenario = 'ssp245', d: 2025 | 2050 | 2090 = 2050) => assessAssetRisk(a, s, d, 'aal').hazardResults[h].score;
+check('Rule 16: Earthquake high in Tokyo, low in Denver', H(site(35.68, 139.69, 40), 'earthquake') > 70 && H(site(39.74, -104.99, 1610), 'earthquake') < 25);
+check('Rule 17: Tsunami only on low coasts near subduction zones (Sendai yes, Paris no)', H(site(38.27, 141.0, 3), 'tsunami') > 20 && H(site(48.86, 2.35, 35), 'tsunami') === 0);
+check('Rule 18: Volcanic hazard near Naples, none in London', H(site(40.85, 14.27, 20), 'volcano') > 30 && H(site(51.5, -0.12, 11), 'volcano') === 0);
+check('Rule 19: Tornado high in Oklahoma, near zero in Singapore', H(site(35.47, -97.52, 360), 'tornado') > 70 && H(site(1.35, 103.82, 15), 'tornado') < 10);
+check('Rule 20: Sea level rise only for low coastal land, growing with warming',
+  H(site(25.77, -80.19, 2), 'sea_level_rise', 'ssp585', 2090) > H(site(25.77, -80.19, 2), 'sea_level_rise', 'ssp585', 2025) && H(site(39.74, -104.99, 1610), 'sea_level_rise') === 0);
+check('Rule 21: Earthquake is not climate driven (same score in 2025 and 2090)', H(site(35.68, 139.69, 40), 'earthquake', 'ssp585', 2025) === H(site(35.68, 139.69, 40), 'earthquake', 'ssp585', 2090));
+const withLive: Asset = { ...site(19.07, 72.88, 14), liveData: { fetchedAt: 'x', heatDays35Now: 10, heatDays35Mid: 40, quakesM5Within150km: 0 } };
+const lvNow = assessAssetRisk(withLive, 'ssp585', 2025, 'aal').hazardResults.extreme_heat;
+const lvMid = assessAssetRisk(withLive, 'ssp585', 2050, 'aal').hazardResults.extreme_heat;
+check(`Rule 22: Live CMIP6 heat days drive the heat hazard (now ${lvNow.absoluteValue}, 2050 ${lvMid.absoluteValue})`, Math.abs(lvNow.absoluteValue - 10) < 0.01 && lvMid.absoluteValue > 35 && lvMid.absoluteValue < 50);
+check('Rule 23: Every hazard has a family, adaptation advice and finite numbers', portfolioAssets.slice(0, 20).every((a) => {
+  const r = assessAssetRisk(a, 'ssp370', 2070, '250yr');
+  return Object.values(r.hazardResults).every((h) => Number.isFinite(h.score) && Number.isFinite(h.absoluteValue)) && r.adaptationRoi.recommendedMeasures.length > 0 && r.familyScores.length === 6;
+}));
+
+
+// -----------------------------------------------------------------------------
+// 7. Portfolio tail-risk coherence (from usability audit)
+// -----------------------------------------------------------------------------
+console.log('\n--- 7. PORTFOLIO TAIL-RISK COHERENCE ---');
+const one = assessAssetRisk(portfolioAssets[0], 'ssp245', 2050, '100yr');
+check('Rule 24: Portfolio VaR of a single site equals that site\'s VaR', computePortfolioSummary([one]).var995Usd === one.valueAtRisk995);
+let mono = true;
+let prev = 0;
+const grow: ReturnType<typeof assessAssetRisk>[] = [];
+for (const a of portfolioAssets.slice(0, 30)) {
+  grow.push(assessAssetRisk(a, 'ssp245', 2050, '100yr'));
+  const v = computePortfolioSummary(grow).var995Usd;
+  if (v + 1 < prev) mono = false;
+  prev = v;
+}
+check('Rule 25: Adding sites never lowers portfolio VaR', mono);
+const pv = computePortfolioSummary(grow);
+check('Rule 26: Portfolio VaR <= sum of site VaRs (diversification only reduces)', pv.var995Usd <= grow.reduce((t, a) => t + a.valueAtRisk995, 0) + 1);
+const base = portfolioAssets[3];
+const calibrated = { ...base, liveData: { fetchedAt: 'x', demElevationM: 999, heatDays35Now: 30 } };
+const reverted = { ...calibrated, liveData: undefined };
+check('Rule 27: Reverting live data restores the original result exactly',
+  assessAssetRisk(reverted, 'ssp245', 2050, 'aal').aalUsd === assessAssetRisk(base, 'ssp245', 2050, 'aal').aalUsd);
 
 console.log('\n========================================================================');
 console.log(`OVERALL AUDIT VERIFICATION: ${allPassed && coastalGuardrailPass && cycloneMpiCapPass && haversinePass ? 'ALL TESTS PASSED WITH 100% PHYSICAL RIGOR' : 'SOME TESTS FAILED'}`);

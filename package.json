@@ -1,5 +1,5 @@
 {
-  "name": "data",
+  "name": "climaris",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -7,13 +7,15 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "npx -y tsx scripts/test_engine.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.5",
     "@types/leaflet": "^1.9.22",
     "@types/papaparse": "^5.5.2",
     "clsx": "^2.1.1",
+    "h5wasm": "^0.7.9",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.73.0",
     "papaparse": "^5.7.1",

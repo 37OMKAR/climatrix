@@ -1,492 +1,236 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { AssetRiskAssessment, HazardType, ReturnPeriod, SSPScenario } from '../types/climate';
 import {
-  AssetRiskAssessment,
-  HazardType,
-  ReturnPeriod,
-  SSPScenario,
-} from '../types/climate';
-import {
-  ALL_HAZARDS,
-  formatCurrencyUsd,
   HAZARD_CATALOG,
-  getRatingBadgeBg,
-  getRatingColor,
   SSP_SCENARIOS,
-  estimateGlobalElevationMeters,
+  formatCurrencyUsd,
+  siteElevation,
   getDistanceToOceanKm,
+  getAssetVulnerabilityWeights,
+  HAZARD_TAXONOMY,
 } from '../services/climateEngine';
-import {
-  X,
-  MapPin,
-  Building,
-  DollarSign,
-  TrendingUp,
-  ShieldCheck,
-  AlertTriangle,
-  Flame,
-  Waves,
-  Wind,
-  Sun,
-  Layers,
-  Calendar,
-  CheckCircle2,
-  ArrowRight,
-  Sparkles,
-} from 'lucide-react';
+import { X, MapPin, ShieldCheck, Radio, Loader2 } from 'lucide-react';
+import { HazardFamilyList, familyMeta } from './HazardFamilies';
+import { LIVE_SOURCES } from '../services/liveData';
+import { ModalShell, RatingBadge, Button, cx } from './ui';
 
 interface HazardDeepDiveModalProps {
   assessment: AssetRiskAssessment | null;
   onClose: () => void;
   activeScenario: SSPScenario;
+  onFetchLive?: (id: string) => void;
+  onClearLive?: (id: string) => void;
+  liveBusy?: boolean;
 }
 
-export const HazardDeepDiveModal: React.FC<HazardDeepDiveModalProps> = ({
-  assessment,
-  onClose,
-  activeScenario,
-}) => {
-  const [selectedHazardTab, setSelectedHazardTab] = useState<HazardType>('coastal_flood');
+const RPS: Array<{ id: ReturnPeriod; label: string }> = [
+  { id: 'aal', label: 'Average' },
+  { id: '10yr', label: '1-in-10' },
+  { id: '50yr', label: '1-in-50' },
+  { id: '100yr', label: '1-in-100' },
+  { id: '250yr', label: '1-in-250' },
+  { id: '500yr', label: '1-in-500' },
+];
+const fmt = (v: number) => (Math.abs(v) >= 100 ? Math.round(v).toLocaleString() : Number(v.toFixed(2)).toString());
+
+export const HazardDeepDiveModal: React.FC<HazardDeepDiveModalProps> = ({ assessment, onClose, activeScenario, onFetchLive, onClearLive, liveBusy }) => {
+  const [hz, setHz] = useState<HazardType>('coastal_flood');
+
+  // Open on the asset's main hazard, and reset when a different asset is opened
+  useEffect(() => {
+    if (assessment) setHz(assessment.primaryHazard);
+  }, [assessment?.asset.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!assessment) return null;
+  const a = assessment;
+  const { asset, adaptationRoi: roi } = a;
+  const h = a.hazardResults[hz];
+  const meta = HAZARD_CATALOG[hz];
+  const elev = siteElevation(asset);
+  const vWeight = getAssetVulnerabilityWeights(asset.assetType)[hz] ?? 1;
 
-  const {
-    asset,
-    compositeScore,
-    compositeRating,
-    totalExpectedAnnualLossUsd,
-    totalDamageRatio,
-    valueAtRisk95,
-    valueAtRisk995,
-    downtimeDays,
-    businessInterruptionLossUsd,
-    primaryHazard,
-    adaptationRoi,
-  } = assessment;
-
-  const currentHazard = assessment.hazardResults[selectedHazardTab];
-  const hazardMeta = HAZARD_CATALOG[selectedHazardTab];
+  // Fragility curve exactly as the engine computes it for this asset type
+  const dmg = (s: number) => Math.min(0.95, Math.max(0.001, (1 / (1 + Math.exp(-6 * (s / 100 - 0.45)))) * vWeight * 0.35));
+  const yMax = Math.max(0.05, dmg(100));
+  const W = 300, H = 120, L = 34, B = 100, T = 10;
+  const px = (s: number) => L + (s / 100) * (W - L - 6);
+  const py = (d: number) => B - (d / yMax) * (B - T);
+  const curve = Array.from({ length: 51 }, (_, i) => i * 2).map((s, i) => `${i ? 'L' : 'M'}${px(s).toFixed(1)},${py(dmg(s)).toFixed(1)}`).join(' ');
+  const rpVals = RPS.map((r) => h.returnPeriodValues[r.id]);
+  const rpMax = Math.max(1e-9, ...rpVals.map(Math.abs));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-6xl max-h-[92vh] flex flex-col bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 text-slate-100">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-800 bg-slate-950/90 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-cyan-950 border border-cyan-800 flex items-center justify-center text-cyan-400">
-              <Building className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-white tracking-tight">{asset.name}</h2>
-                <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold uppercase ${getRatingBadgeBg(compositeRating)} text-slate-950`}>
-                  {compositeRating} ({compositeScore}/100)
-                </span>
-              </div>
-              <div className="text-xs text-slate-400 flex flex-wrap items-center gap-2 mt-0.5">
-                <span className="text-slate-300 font-semibold">{asset.parentEntity}</span>
-                <span>•</span>
-                <span>{asset.assetType}</span>
-                <span>•</span>
-                <span className="flex items-center gap-1 font-mono">
-                  <MapPin className="w-3 h-3 text-cyan-400" />
-                  {asset.city}, {asset.country} ({asset.latitude.toFixed(4)}°, {asset.longitude.toFixed(4)}°)
-                </span>
-                <span>•</span>
-                <span className="font-mono">
-                  {(asset.elevationMeters && asset.elevationMeters > 0 ? asset.elevationMeters : estimateGlobalElevationMeters(asset.latitude, asset.longitude))}m elev • {getDistanceToOceanKm(asset.latitude, asset.longitude)}km to ocean
-                </span>
-              </div>
-            </div>
+    <ModalShell onClose={onClose} maxWidth="max-w-6xl" labelledBy="dd-title">
+      <div className="px-6 py-4 border-b border-white/[0.06] flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 id="dd-title" className="text-lg font-semibold text-white">{asset.name}</h2>
+            <RatingBadge rating={a.compositeRating} score={a.compositeScore} size="md" />
           </div>
+          <div className="text-xs text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
+            {asset.parentEntity} · {asset.assetType}
+            <span className="text-slate-600">·</span>
+            <MapPin className="w-3.5 h-3.5" /> {asset.city}, {asset.country} ({asset.latitude.toFixed(3)}, {asset.longitude.toFixed(3)})
+            <span className="text-slate-600">·</span> {elev} m · {getDistanceToOceanKm(asset.latitude, asset.longitude)} km to coast
+          </div>
+        </div>
+        <button onClick={onClose} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06]" aria-label="Close"><X className="w-5 h-5" /></button>
+      </div>
 
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {[
+            { l: 'Replacement value', v: formatCurrencyUsd(asset.replacementValueUsd), c: undefined as string | undefined },
+            { l: 'Average annual loss', v: formatCurrencyUsd(a.aalUsd) },
+            { l: a.lossMetricType === 'AAL' ? 'Damage ratio' : `${a.returnPeriod.replace('yr', '')}-yr event loss`, v: a.lossMetricType === 'AAL' ? `${(a.aalDamageRatio * 100).toFixed(2)}%` : formatCurrencyUsd(a.periodExceedanceLossUsd) },
+            { l: 'VaR 99.5%', v: formatCurrencyUsd(a.valueAtRisk995) },
+            { l: 'Downtime per event', v: `${a.downtimeDays} days` },
+            { l: 'Business interruption', v: formatCurrencyUsd(a.businessInterruptionLossUsd) },
+          ].map((k) => (
+            <div key={k.l} className="rounded-xl bg-white/[0.03] ring-1 ring-white/[0.05] px-3 py-2.5">
+              <div className="text-xs text-slate-400">{k.l}</div>
+              <div className={`text-base font-semibold tabular-nums ${k.c ?? 'text-white'}`}>{k.v}</div>
+            </div>
+          ))}
         </div>
 
-        {/* Content Body: Scrollable */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Top Quick Stats Strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
-              <div className="text-[11px] text-slate-400 font-mono">Replacement Value</div>
-              <div className="text-base font-black text-white font-mono mt-0.5">
-                {formatCurrencyUsd(asset.replacementValueUsd)}
-              </div>
+        <div className="grid lg:grid-cols-12 gap-5 items-start">
+        <div className="lg:col-span-5">
+          <div className="text-sm text-white font-medium mb-2">Hazards by family <span className="text-slate-500 font-normal text-xs">· select one for detail</span></div>
+          <HazardFamilyList assessment={a} selected={hz} onSelect={setHz} />
+        </div>
+        <div className="lg:col-span-7 lg:sticky lg:top-0">
+        <div className="rounded-2xl ring-1 ring-white/[0.06] bg-white/[0.02] p-5 space-y-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="max-w-2xl">
+              <div className="text-xs mb-1" style={{ color: familyMeta(HAZARD_TAXONOMY[hz].family).color }}>{familyMeta(HAZARD_TAXONOMY[hz].family).name} · {HAZARD_TAXONOMY[hz].onset}{HAZARD_TAXONOMY[hz].climateDriven ? '' : ' · not climate-driven'}</div>
+              <div className="flex items-center gap-2"><h3 className="text-base font-semibold text-white">{meta.shortName}</h3>{meta.shortName !== meta.name && <span className="text-xs text-slate-500">{meta.name}</span>}<RatingBadge rating={h.rating} score={h.score} /></div>
+              <p className="text-xs text-slate-400 mt-1">{meta.description}</p>
             </div>
-
-            <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
-              <div className="text-[11px] text-slate-400 font-mono">Expected Annual Loss</div>
-              <div className="text-base font-black text-red-400 font-mono mt-0.5">
-                {formatCurrencyUsd(totalExpectedAnnualLossUsd)}/yr
-              </div>
-            </div>
-
-            <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
-              <div className="text-[11px] text-slate-400 font-mono">Physical Damage Ratio</div>
-              <div className="text-base font-black text-amber-300 font-mono mt-0.5">
-                {(totalDamageRatio * 100).toFixed(2)}%
-              </div>
-            </div>
-
-            <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
-              <div className="text-[11px] text-slate-400 font-mono">VaR 99.5% (Tail Risk)</div>
-              <div className="text-base font-black text-rose-400 font-mono mt-0.5">
-                {formatCurrencyUsd(valueAtRisk995)}
-              </div>
-            </div>
-
-            <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
-              <div className="text-[11px] text-slate-400 font-mono">Projected Downtime</div>
-              <div className="text-base font-black text-amber-400 font-mono mt-0.5">
-                {downtimeDays} Days
-              </div>
-            </div>
-
-            <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
-              <div className="text-[11px] text-slate-400 font-mono">Business Interruption</div>
-              <div className="text-base font-black text-orange-400 font-mono mt-0.5">
-                {formatCurrencyUsd(businessInterruptionLossUsd)}
-              </div>
-            </div>
+            <div className="text-xs text-slate-500 w-full">Basis: {meta.cmip6ModelBasis}</div>
           </div>
 
-          {/* 12 Climate Change Hazards Selector Grid */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
-                <Layers className="w-4 h-4 text-cyan-400" />
-                <span>12 Physical Hazard Categories (CMIP6 Multi-Model Ensemble)</span>
-              </h3>
-              <span className="text-xs text-slate-500 font-mono">Click hazard to view absolute return periods</span>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
-              {ALL_HAZARDS.map((hId) => {
-                const hRes = assessment.hazardResults[hId];
-                const meta = HAZARD_CATALOG[hId];
-                const isSelected = selectedHazardTab === hId;
-                const isPrimary = primaryHazard === hId;
-
-                return (
-                  <button
-                    key={hId}
-                    onClick={() => setSelectedHazardTab(hId)}
-                    className={`p-2.5 rounded-xl text-left border transition relative flex flex-col justify-between ${
-                      isSelected
-                        ? 'bg-slate-800 border-cyan-500 shadow-md shadow-cyan-500/20 ring-1 ring-cyan-500'
-                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 hover:bg-slate-800/40'
-                    }`}
-                  >
-                    {isPrimary && (
-                      <span className="absolute -top-1.5 -right-1 text-[9px] px-1.5 py-0.2 rounded bg-amber-500 text-slate-950 font-black font-mono">
-                        TOP RISK
-                      </span>
-                    )}
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      <span
-                        className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: meta.colorHex }}
-                      />
-                      <span className="text-xs font-bold text-slate-200 truncate">
-                        {meta.shortName}
-                      </span>
-                    </div>
-
-                    <div className="flex items-baseline justify-between mt-auto">
-                      <span className="text-sm font-black font-mono text-white">
-                        {hRes ? hRes.score : '-'}
-                      </span>
-                      <span className={`text-[9px] px-1 py-0.2 rounded font-mono font-bold ${getRatingBadgeBg(hRes ? hRes.rating : 'Low')} text-slate-950`}>
-                        {hRes ? hRes.rating : '-'}
-                      </span>
-                    </div>
-
-                    <div className="text-[10px] text-cyan-400 font-mono truncate mt-1">
-                      {hRes ? hRes.absoluteValue : '-'} {meta.unit}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+          <div className="grid grid-cols-3 gap-3 text-sm">
+            <div><div className="text-xs text-slate-400">{a.lossMetricType === 'AAL' ? 'Share of annual loss' : `Share of 1-in-${a.returnPeriod.replace('yr', '')} loss`}</div><div className="font-semibold text-white tabular-nums">{formatCurrencyUsd(h.expectedLossUsd)}</div></div>
+            <div><div className="text-xs text-slate-400">Damage if this hazard hits alone</div><div className="font-semibold text-white tabular-nums">{(h.damageRatio * 100).toFixed(2)}%</div></div>
+            <div><div className="text-xs text-slate-400">Change vs today</div><div className={cx('font-semibold tabular-nums', h.deltaPercent > 0 ? 'text-red-300' : h.deltaPercent < 0 ? 'text-emerald-300' : 'text-slate-300')}>{h.deltaPercent > 0 ? '+' : ''}{h.deltaPercent}%</div></div>
           </div>
 
-          {/* Active Selected Hazard Deep Dive Details */}
-          {currentHazard && (
-            <div className="p-5 rounded-2xl bg-slate-950/80 border border-slate-800 shadow-xl space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-9 h-9 rounded-xl flex items-center justify-center text-white"
-                    style={{ backgroundColor: hazardMeta.colorHex }}
-                  >
-                    <Layers className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-base font-bold text-white flex items-center gap-2">
-                      <span>{hazardMeta.name}</span>
-                      <span className="text-xs font-normal text-slate-400 font-mono">
-                        Category: {hazardMeta.category}
-                      </span>
-                    </h4>
-                    <p className="text-xs text-slate-400 mt-0.5">{hazardMeta.description}</p>
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <div className="text-xs text-slate-400 font-mono">CMIP6 Model Basis:</div>
-                  <div className="text-xs font-semibold text-cyan-300 font-mono">{hazardMeta.cmip6ModelBasis}</div>
-                </div>
-              </div>
-
-              {/* Absolute Return Period Multi-Horizon Calculation Logic */}
-              <div>
-                <div className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono mb-2 flex items-center justify-between">
-                  <span>Multiple Return Period Calculation Logic ({hazardMeta.unit})</span>
-                  <span className="text-cyan-400 text-[11px] font-normal">Exceedance Probability Function (GEV / Gumbel)</span>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 font-mono">
-                  {(['aal', '10yr', '50yr', '100yr', '250yr', '500yr'] as ReturnPeriod[]).map((rp) => {
-                    const val = currentHazard.returnPeriodValues[rp];
-                    const label =
-                      rp === 'aal' ? 'Annual Average' :
-                      rp === '10yr' ? '10-Yr (10%)' :
-                      rp === '50yr' ? '50-Yr (2%)' :
-                      rp === '100yr' ? '100-Yr (1%)' :
-                      rp === '250yr' ? '250-Yr (0.4%)' : '500-Yr (0.2%)';
-
-                    return (
-                      <div key={rp} className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-center">
-                        <div className="text-[10px] text-slate-400 uppercase font-sans font-semibold">{label}</div>
-                        <div className="text-base font-bold text-cyan-300 mt-1">{val}</div>
-                        <div className="text-[9px] text-slate-500">{hazardMeta.unit}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Hazard Impact Breakdown */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs font-mono">
-                <div>
-                  <span className="text-slate-400 font-sans">Projected Loss from this Hazard:</span>
-                  <div className="text-sm font-bold text-red-400 mt-0.5">
-                    {formatCurrencyUsd(currentHazard.expectedLossUsd)}/yr
-                  </div>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-sans">Single Hazard Damage Ratio:</span>
-                  <div className="text-sm font-bold text-amber-300 mt-0.5">
-                    {(currentHazard.damageRatio * 100).toFixed(2)}%
-                  </div>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-sans">Decadal Delta vs Today:</span>
-                  <div className="text-sm font-bold text-cyan-300 mt-0.5">
-                    +{currentHazard.deltaPercent}% increase
-                  </div>
-                </div>
-              </div>
-
-              {/* Scientific Visual Curves: Vulnerability S-Curve & Return Period Exceedance */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2">
-                {/* Chart 1: Non-Linear Vulnerability Damage Function */}
-                <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800">
-                  <div className="flex items-center justify-between text-xs font-mono mb-2">
-                    <span className="font-bold text-slate-200">Vulnerability Damage Function S-Curve</span>
-                    <span className="text-cyan-400 text-[10px]">&gt;250 Taxonomy Calibration</span>
-                  </div>
-                  <div className="h-44 w-full relative">
-                    <svg className="w-full h-full overflow-visible" viewBox="0 0 300 130">
-                      {/* Grid lines */}
-                      <line x1="30" y1="15" x2="290" y2="15" stroke="#1e293b" strokeDasharray="2 2" />
-                      <line x1="30" y1="45" x2="290" y2="45" stroke="#1e293b" strokeDasharray="2 2" />
-                      <line x1="30" y1="75" x2="290" y2="75" stroke="#1e293b" strokeDasharray="2 2" />
-                      <line x1="30" y1="105" x2="290" y2="105" stroke="#334155" />
-                      <line x1="30" y1="15" x2="30" y2="105" stroke="#334155" />
-
-                      {/* Y-axis labels */}
-                      <text x="24" y="20" fill="#64748b" fontSize="8" textAnchor="end">100%</text>
-                      <text x="24" y="50" fill="#64748b" fontSize="8" textAnchor="end">65%</text>
-                      <text x="24" y="80" fill="#64748b" fontSize="8" textAnchor="end">30%</text>
-                      <text x="24" y="108" fill="#64748b" fontSize="8" textAnchor="end">0%</text>
-
-                      {/* S-curve path */}
-                      <path
-                        d="M 30,105 C 100,104 130,85 160,55 C 190,25 240,18 290,16"
-                        fill="none"
-                        stroke={hazardMeta.colorHex}
-                        strokeWidth="2.5"
-                      />
-
-                      {/* Current operating point pin */}
-                      {(() => {
-                        const scoreFraction = Math.min(1, Math.max(0, currentHazard.score / 100));
-                        const px = 30 + scoreFraction * 260;
-                        const py = 105 - (currentHazard.damageRatio / 0.5) * 80;
-                        const clampedPy = Math.max(16, Math.min(105, py));
-                        return (
-                          <g>
-                            <circle cx={px} cy={clampedPy} r="5" fill="#f59e0b" stroke="#ffffff" strokeWidth="1.5" className="animate-pulse" />
-                            <line x1={px} y1={clampedPy} x2={px} y2="105" stroke="#f59e0b" strokeDasharray="2 2" opacity="0.6" />
-                            <text x={Math.min(270, Math.max(50, px))} y={Math.max(12, clampedPy - 8)} fill="#f59e0b" fontSize="8" fontWeight="bold" textAnchor="middle">
-                              Current: {(currentHazard.damageRatio * 100).toFixed(1)}% Damage
-                            </text>
-                          </g>
-                        );
-                      })()}
-
-                      {/* X-axis label */}
-                      <text x="160" y="122" fill="#94a3b8" fontSize="8" textAnchor="middle" fontFamily="monospace">
-                        Hazard Intensity ({hazardMeta.unit})
-                      </text>
-                    </svg>
-                  </div>
-                </div>
-
-                {/* Chart 2: Return Period Exceedance Probability Curve */}
-                <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800">
-                  <div className="flex items-center justify-between text-xs font-mono mb-2">
-                    <span className="font-bold text-slate-200">Return Period Exceedance Curve</span>
-                    <span className="text-purple-400 text-[10px]">Extreme Value Theory (GEV)</span>
-                  </div>
-                  <div className="h-44 w-full relative">
-                    <svg className="w-full h-full overflow-visible" viewBox="0 0 300 130">
-                      {/* Grid */}
-                      <line x1="35" y1="15" x2="290" y2="15" stroke="#1e293b" strokeDasharray="2 2" />
-                      <line x1="35" y1="45" x2="290" y2="45" stroke="#1e293b" strokeDasharray="2 2" />
-                      <line x1="35" y1="75" x2="290" y2="75" stroke="#1e293b" strokeDasharray="2 2" />
-                      <line x1="35" y1="105" x2="290" y2="105" stroke="#334155" />
-                      <line x1="35" y1="15" x2="35" y2="105" stroke="#334155" />
-
-                      {/* Return Period Points */}
-                      {(() => {
-                        const rpKeys: ReturnPeriod[] = ['10yr', '50yr', '100yr', '250yr', '500yr'];
-                        const vals = rpKeys.map((k) => currentHazard.returnPeriodValues[k]);
-                        const maxVal = Math.max(...vals, 1);
-                        const points = rpKeys.map((k, i) => {
-                          const x = 50 + i * 55;
-                          const y = 105 - (currentHazard.returnPeriodValues[k] / maxVal) * 85;
-                          return { x, y, k, val: currentHazard.returnPeriodValues[k] };
-                        });
-                        const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`).join(' ');
-
-                        return (
-                          <g>
-                            <path d={pathD} fill="none" stroke="#a855f7" strokeWidth="2.5" />
-                            {points.map((p, i) => (
-                              <g key={i}>
-                                <circle cx={p.x} cy={p.y} r="4" fill="#a855f7" stroke="#ffffff" strokeWidth="1.2" />
-                                <text x={p.x} y={p.y - 7} fill="#c084fc" fontSize="8" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
-                                  {p.val}
-                                </text>
-                                <text x={p.x} y="118" fill="#64748b" fontSize="8" textAnchor="middle" fontFamily="monospace">
-                                  {p.k}
-                                </text>
-                              </g>
-                            ))}
-                          </g>
-                        );
-                      })()}
-
-                      {/* Y-axis label */}
-                      <text x="30" y="20" fill="#64748b" fontSize="7" textAnchor="end">High</text>
-                      <text x="30" y="105" fill="#64748b" fontSize="7" textAnchor="end">Low</text>
-                      <text x="160" y="128" fill="#94a3b8" fontSize="8" textAnchor="middle" fontFamily="monospace">
-                        Return Period Horizon (10-Yr to 500-Yr Tail Risk)
-                      </text>
-                    </svg>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Adaptation & Financial Resilience Engineering ROI */}
-          <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border border-slate-800 shadow-xl space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
-              <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
-                  <span>Financial Impact Mitigation & Adaptation ROI</span>
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Proprietary engineering vulnerability adaptation functions for {asset.assetType}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 text-xs font-mono">
-                <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-bold">
-                  Payback: {adaptationRoi.paybackPeriodYears} Years
-                </span>
-              </div>
-            </div>
-
-            {/* ROI Metrics */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
-              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                <div className="text-[10px] text-slate-400 font-sans">Estimated Capex</div>
-                <div className="text-sm font-bold text-white mt-1">
-                  {formatCurrencyUsd(adaptationRoi.estimatedCapexUsd)}
-                </div>
-                <div className="text-[10px] text-slate-500">~3.5% of asset value</div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                <div className="text-[10px] text-slate-400 font-sans">Annual Loss Avoided</div>
-                <div className="text-sm font-bold text-emerald-400 mt-1">
-                  {formatCurrencyUsd(adaptationRoi.annualLossReductionUsd)}/yr
-                </div>
-                <div className="text-[10px] text-emerald-500/80">45% risk mitigation</div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                <div className="text-[10px] text-slate-400 font-sans">15-Yr Net Benefit</div>
-                <div className="text-sm font-bold text-cyan-300 mt-1">
-                  {formatCurrencyUsd(adaptationRoi.netResilienceBenefitUsd)}
-                </div>
-                <div className="text-[10px] text-slate-500">Post-amortization</div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                <div className="text-[10px] text-slate-400 font-sans">Insurance Premium Delta</div>
-                <div className="text-sm font-bold text-teal-300 mt-1">-32% Spread</div>
-                <div className="text-[10px] text-slate-500">Resilience credit</div>
-              </div>
-            </div>
-
-            {/* Recommended Engineering Countermeasures */}
+          <div className="grid lg:grid-cols-2 gap-5">
             <div>
-              <div className="text-xs font-semibold text-slate-300 mb-2 font-mono uppercase tracking-wider">
-                Recommended Engineering Countermeasures:
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {adaptationRoi.recommendedMeasures.map((measure, idx) => (
-                  <div key={idx} className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800/80 flex items-start gap-2.5 text-xs text-slate-300">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                    <span>{measure}</span>
-                  </div>
+              <div className="text-xs text-slate-400 mb-2">Intensity by return period ({h.unit})</div>
+              <ul className="space-y-2">
+                {RPS.map((r, i) => (
+                  <li key={r.id} className="flex items-center gap-3 text-xs">
+                    <span className={cx('w-16', r.id === a.returnPeriod ? 'text-white font-medium' : 'text-slate-400')}>{r.label}</span>
+                    <div className="flex-1 h-2 rounded-full bg-white/[0.05] overflow-hidden">
+                      <div className="h-full rounded-full bg-cyan-400" style={{ width: `${(Math.abs(rpVals[i]) / rpMax) * 100}%`, opacity: r.id === a.returnPeriod ? 1 : 0.5 }} />
+                    </div>
+                    <span className="w-20 text-right tabular-nums text-slate-200">{fmt(rpVals[i])}</span>
+                  </li>
                 ))}
-              </div>
+              </ul>
+            </div>
+            <div>
+              <div className="text-xs text-slate-400 mb-2">Damage curve for this asset type (×{vWeight} vulnerability)</div>
+              <svg viewBox={`0 0 ${W} ${H + 14}`} className="w-full h-44" role="img" aria-label="Damage ratio versus hazard score">
+                {[0, 0.5, 1].map((f) => (
+                  <g key={f}>
+                    <line x1={L} x2={W - 6} y1={py(yMax * f)} y2={py(yMax * f)} stroke="#1e293b" />
+                    <text x={L - 4} y={py(yMax * f) + 3} fill="#64748b" fontSize="10" textAnchor="end">{Math.round(yMax * f * 100)}%</text>
+                  </g>
+                ))}
+                <path d={curve} fill="none" stroke="#22d3ee" strokeWidth="2" />
+                {h.score > 0 && (
+                  <g>
+                    <line x1={px(h.score)} x2={px(h.score)} y1={B} y2={py(h.damageRatio)} stroke="#f59e0b" strokeDasharray="2 2" />
+                    <circle cx={px(h.score)} cy={py(h.damageRatio)} r="4.5" fill="#f59e0b" stroke="#0f172a" strokeWidth="2" />
+                  </g>
+                )}
+                {[0, 50, 100].map((s) => <text key={s} x={px(s)} y={B + 12} fill="#64748b" fontSize="10" textAnchor="middle">{s}</text>)}
+                <text x={(L + W) / 2} y={H + 12} fill="#94a3b8" fontSize="10" textAnchor="middle">hazard score</text>
+              </svg>
             </div>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-3 border-t border-slate-800 bg-slate-950 flex items-center justify-between text-xs text-slate-400 font-mono">
-          <span>Active Scenario: {SSP_SCENARIOS[activeScenario]?.name}</span>
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-sans font-semibold transition"
-          >
-            Close Dossier
-          </button>
+        </div>
+        </div>
+
+        {/* Live data */}
+        <div className="rounded-2xl ring-1 ring-white/[0.06] bg-white/[0.02] p-5 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Radio className={cx('w-5 h-5', asset.liveData ? 'text-emerald-300' : 'text-slate-500')} />
+              <h3 className="text-base font-semibold text-white">Live data</h3>
+              <span className="text-xs text-slate-500">{asset.liveData ? `fetched ${new Date(asset.liveData.fetchedAt).toLocaleString()}` : 'not fetched — scores use modelled baselines'}</span>
+            </div>
+            <div className="flex gap-2">
+              {asset.liveData && onClearLive && <Button size="sm" variant="ghost" onClick={() => onClearLive(asset.id)}>Revert to modelled</Button>}
+              {onFetchLive && (
+                <Button size="sm" variant="primary" disabled={liveBusy} icon={liveBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Radio className="w-4 h-4" />} onClick={() => onFetchLive(asset.id)}>
+                  {asset.liveData ? 'Refresh' : 'Fetch live data'}
+                </Button>
+              )}
+            </div>
+          </div>
+          {asset.liveData ? (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {[
+                { l: 'DEM elevation', v: asset.liveData.demElevationM, u: 'm', s: 'Copernicus GLO-90' },
+                { l: 'Days > 35°C', v: asset.liveData.heatDays35Now, v2: asset.liveData.heatDays35Mid, u: 'days/yr', s: 'CMIP6 2015-24 → 2041-50' },
+                { l: 'Frost days', v: asset.liveData.frostDaysNow, v2: asset.liveData.frostDaysMid, u: 'days/yr', s: 'CMIP6 2015-24 → 2041-50' },
+                { l: 'Max 1-day rain', v: asset.liveData.rx1dayNowMm, v2: asset.liveData.rx1dayMidMm, u: 'mm', s: 'CMIP6 2015-24 → 2041-50' },
+                { l: 'Max wind (daily)', v: asset.liveData.windMaxNowKmh, v2: asset.liveData.windMaxMidKmh, u: 'km/h', s: 'CMIP6 2015-24 → 2041-50' },
+                { l: 'M5+ earthquakes ≤150 km', v: asset.liveData.quakesM5Within150km, u: 'since 1975', s: 'USGS ComCat' },
+                { l: 'Peak river flow', v: asset.liveData.riverMaxDischargeM3s, u: 'm³/s', s: 'GloFAS, nearest river' },
+              ].map((k) => (
+                <div key={k.l} className="rounded-xl bg-white/[0.03] px-3 py-2.5">
+                  <div className="text-xs text-slate-400">{k.l}</div>
+                  <div className="text-base font-semibold text-white tabular-nums">
+                    {k.v === undefined ? <span className="text-slate-600">n/a</span> : <>{k.v}{'v2' in k && k.v2 !== undefined && <span className="text-slate-400"> → {k.v2}</span>} <span className="text-xs font-normal text-slate-500">{k.u}</span></>}
+                  </div>
+                  <div className="text-xs text-slate-400">{k.s}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">
+              Fetches real elevation, CMIP6 climate projections, earthquake history and river discharge for this exact location from free public services, then re-scores heat, cold, heavy rain, river flood, windstorm and earthquake with them.
+            </p>
+          )}
+          {asset.liveData?.errors && <div className="text-xs text-amber-200">Some sources failed: {asset.liveData.errors.join(' · ')}</div>}
+          <div className="text-xs text-slate-400">Sources: {LIVE_SOURCES.map((x) => x.name).join(' · ')}</div>
+        </div>
+
+        <div className="rounded-2xl ring-1 ring-white/[0.06] bg-white/[0.02] p-5 space-y-4">
+          <div className="flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-emerald-300" /><h3 className="text-base font-semibold text-white">Adaptation</h3></div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { l: 'Estimated cost', v: formatCurrencyUsd(roi.estimatedCapexUsd), s: '~3.5% of value' },
+              { l: 'Loss avoided / yr', v: formatCurrencyUsd(roi.annualLossReductionUsd), s: '45% of AAL', c: 'text-emerald-300' },
+              { l: 'Payback', v: roi.paybackPeriodYears >= 999 ? 'n/a' : `${roi.paybackPeriodYears} yrs`, c: roi.paybackPeriodYears <= 15 ? 'text-emerald-300' : 'text-amber-200' },
+              { l: '15-yr net benefit', v: formatCurrencyUsd(roi.netResilienceBenefitUsd), c: roi.netResilienceBenefitUsd >= 0 ? 'text-emerald-300' : 'text-red-300' },
+            ].map((k) => (
+              <div key={k.l} className="rounded-xl bg-white/[0.03] px-3 py-2.5">
+                <div className="text-xs text-slate-400">{k.l}</div>
+                <div className={`text-base font-semibold tabular-nums ${k.c ?? 'text-white'}`}>{k.v}</div>
+                {k.s && <div className="text-xs text-slate-400">{k.s}</div>}
+              </div>
+            ))}
+          </div>
+          <ul className="grid sm:grid-cols-2 gap-2">
+            {roi.recommendedMeasures.map((m) => (
+              <li key={m} className="flex gap-2 text-xs text-slate-200 rounded-lg bg-white/[0.03] px-3 py-2"><ShieldCheck className="w-4 h-4 text-emerald-300 shrink-0" />{m}</li>
+            ))}
+          </ul>
         </div>
       </div>
-    </div>
+
+      <div className="px-6 py-3 border-t border-white/[0.06] flex items-center justify-between text-xs text-slate-500">
+        <span>{SSP_SCENARIOS[activeScenario].name} · {a.decade === 2025 ? 'today' : `${a.decade}s`}</span>
+        <Button onClick={onClose}>Close</Button>
+      </div>
+    </ModalShell>
   );
 };
-

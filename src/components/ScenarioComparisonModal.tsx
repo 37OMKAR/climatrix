@@ -1,212 +1,105 @@
-import React, { useState } from 'react';
-import {
-  Asset,
-  Decade,
-  SSPScenario,
-} from '../types/climate';
-import {
-  assessAssetRisk,
-  formatCurrencyUsd,
-  SSP_SCENARIOS,
-} from '../services/climateEngine';
-import {
-  X,
-  GitCompare,
-  TrendingUp,
-  AlertTriangle,
-  ArrowRight,
-  Info,
-} from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Asset, Decade, ReturnPeriod, SSPScenario } from '../types/climate';
+import { assessAssetRisk, formatCurrencyUsd, SSP_SCENARIOS } from '../services/climateEngine';
+import { X } from 'lucide-react';
+import { ModalShell, Segmented, Button } from './ui';
 
 interface ScenarioComparisonModalProps {
   isOpen: boolean;
   onClose: () => void;
   assets: Asset[];
+  initialDecade?: Decade;
+  returnPeriod?: ReturnPeriod;
 }
 
-export const ScenarioComparisonModal: React.FC<ScenarioComparisonModalProps> = ({
-  isOpen,
-  onClose,
-  assets,
-}) => {
-  const [selectedDecade, setSelectedDecade] = useState<Decade>(2050);
+const SCENARIOS: SSPScenario[] = ['ssp119', 'ssp126', 'ssp245', 'ssp370', 'ssp585'];
+const DECADES: Decade[] = [2030, 2040, 2050, 2060, 2070, 2080, 2090];
+
+export const ScenarioComparisonModal: React.FC<ScenarioComparisonModalProps> = ({ isOpen, onClose, assets, initialDecade = 2050, returnPeriod = 'aal' }) => {
+  const [decade, setDecade] = useState<Decade>(initialDecade === 2025 ? 2050 : initialDecade);
+  const [metric, setMetric] = useState<'aal' | 'event'>(returnPeriod === 'aal' ? 'aal' : 'event');
+  useEffect(() => {
+    if (isOpen) {
+      setDecade(initialDecade === 2025 ? 2050 : initialDecade);
+      setMetric(returnPeriod === 'aal' ? 'aal' : 'event');
+    }
+  }, [isOpen, initialDecade, returnPeriod]);
+
+  const rp: ReturnPeriod = metric === 'aal' ? 'aal' : returnPeriod === 'aal' ? '100yr' : returnPeriod;
+
+  const results = useMemo(() => {
+    if (!isOpen) return [];
+    return SCENARIOS.map((s) => {
+      let loss = 0;
+      let score = 0;
+      assets.forEach((a) => {
+        const r = assessAssetRisk(a, s, decade, rp);
+        loss += r.totalExpectedAnnualLossUsd;
+        score += r.compositeScore;
+      });
+      return { s, meta: SSP_SCENARIOS[s], loss, avgScore: assets.length ? Number((score / assets.length).toFixed(1)) : 0 };
+    });
+  }, [isOpen, assets, decade, rp]);
 
   if (!isOpen) return null;
 
-  const scenarios: SSPScenario[] = ['ssp119', 'ssp126', 'ssp245', 'ssp370', 'ssp585'];
-
-  // Compute portfolio results across the 4 scenarios for the chosen decade
-  const scenarioResults = scenarios.map((scKey) => {
-    let totalLoss = 0;
-    let sumScore = 0;
-
-    assets.forEach((asset) => {
-      const assessment = assessAssetRisk(asset, scKey, selectedDecade, 'aal');
-      totalLoss += assessment.totalExpectedAnnualLossUsd;
-      sumScore += assessment.compositeScore;
-    });
-
-    const avgScore = assets.length > 0 ? Number((sumScore / assets.length).toFixed(1)) : 0;
-    return {
-      scenario: scKey,
-      meta: SSP_SCENARIOS[scKey],
-      totalLoss,
-      avgScore,
-    };
-  });
-
-  const baseLossSsp126 = scenarioResults.find((s) => s.scenario === 'ssp126')?.totalLoss || 1;
-  const maxLoss = Math.max(...scenarioResults.map((s) => s.totalLoss), 1);
+  const base = results.find((r) => r.s === 'ssp119')!;
+  const worst = results.find((r) => r.s === 'ssp585')!;
+  const max = Math.max(1, ...results.map((r) => r.loss));
+  const uplift = base.loss > 0 ? Math.round(((worst.loss - base.loss) / base.loss) * 100) : 0;
+  const metricLabel = metric === 'aal' ? 'Average annual loss' : `1-in-${rp.replace('yr', '')}-year event loss`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-5xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 text-slate-100 flex flex-col max-h-[92vh]">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-800 bg-slate-950/90 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-950 border border-amber-800 flex items-center justify-center text-amber-400">
-              <GitCompare className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-white tracking-tight">
-                CMIP6 Shared Socioeconomic Pathways (SSP) Comparison
-              </h2>
-              <p className="text-xs text-slate-400">
-                Side-by-side stress testing: Paris 1.5°C vs Moderate vs Fossil-Fueled Worst Case
-              </p>
-            </div>
-          </div>
+    <ModalShell onClose={onClose} maxWidth="max-w-5xl" labelledBy="cmp-title">
+      <div className="px-6 py-4 border-b border-white/[0.06] flex items-center justify-between">
+        <div>
+          <h2 id="cmp-title" className="text-base font-semibold text-white">Compare scenarios</h2>
+          <p className="text-xs text-slate-400 mt-0.5">How the same {assets.length} sites fare under each emissions pathway</p>
+        </div>
+        <button onClick={onClose} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06]" aria-label="Close"><X className="w-5 h-5" /></button>
+      </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
-          >
-            <X className="w-4 h-4" />
-          </button>
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex flex-wrap items-center gap-4">
+          <Segmented size="sm" value={decade} onChange={setDecade} options={DECADES.map((d) => ({ value: d, label: String(d) }))} ariaLabel="Decade" />
+          <Segmented size="sm" value={metric} onChange={setMetric} options={[{ value: 'aal', label: 'Average year' }, { value: 'event', label: `1-in-${(returnPeriod === 'aal' ? '100yr' : returnPeriod).replace('yr', '')} event` }]} ariaLabel="Metric" />
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Decade Horizon Selector */}
-          <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-slate-950/70 border border-slate-800">
-            <div>
-              <span className="text-xs font-bold text-white font-mono uppercase tracking-wider block">
-                Select Time Horizon Decade:
-              </span>
-              <span className="text-xs text-slate-400">Observe divergence as warming paths separate over time</span>
-            </div>
-
-            <div className="flex items-center bg-slate-900 p-1 rounded-lg border border-slate-800 font-mono text-xs">
-              {([2030, 2040, 2050, 2060, 2070, 2080, 2090] as Decade[]).map((d) => (
-                <button
-                  key={d}
-                  onClick={() => setSelectedDecade(d)}
-                  className={`px-3 py-1.5 rounded-md font-bold transition ${
-                    selectedDecade === d
-                      ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                  }`}
-                >
-                  {d}s
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 5 SSP Scenario Cards Side-by-Side */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
-            {scenarioResults.map((item) => {
-              const deltaPercent = Number((((item.totalLoss - baseLossSsp126) / baseLossSsp126) * 100).toFixed(0));
-              const heightBarPercent = Math.max(15, Math.round((item.totalLoss / maxLoss) * 100));
-
-              return (
-                <div
-                  key={item.scenario}
-                  className="p-5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between relative overflow-hidden group hover:border-slate-700 transition"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span
-                        className="text-xs font-black font-mono px-2 py-0.5 rounded"
-                        style={{ backgroundColor: `${item.meta.color}22`, color: item.meta.color }}
-                      >
-                        {item.meta.code}
-                      </span>
-                      <span className="text-xs font-mono font-bold text-slate-300">
-                        {item.meta.warming2100}
-                      </span>
-                    </div>
-
-                    <h3 className="text-sm font-bold text-white line-clamp-1">{item.meta.name}</h3>
-                    <p className="text-[11px] text-slate-400 leading-relaxed line-clamp-3">
-                      {item.meta.description}
-                    </p>
+        <div className="space-y-3">
+          {results.map((r) => {
+            const delta = base.loss > 0 ? Math.round(((r.loss - base.loss) / base.loss) * 100) : 0;
+            return (
+              <div key={r.s} className="rounded-xl bg-white/[0.03] ring-1 ring-white/[0.05] px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: r.meta.color }} />
+                    <span className="text-sm text-white font-medium">{r.meta.code}</span>
+                    <span className="text-xs text-slate-400 truncate">{r.meta.name.replace(r.meta.code, '').replace(/^\s*\(|\)\s*$/g, '').trim()} · {r.meta.warming2100}</span>
                   </div>
-
-                  {/* Visual Bar Comparison */}
-                  <div className="my-4 pt-4 border-t border-slate-800">
-                    <div className="text-[10px] text-slate-400 font-mono uppercase mb-1">
-                      Expected Annual Loss ({selectedDecade}s)
-                    </div>
-                    <div className="text-xl font-black text-white font-mono">
-                      {formatCurrencyUsd(item.totalLoss)}/yr
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div className="w-full h-2 rounded-full bg-slate-800 mt-2 overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{
-                          width: `${heightBarPercent}%`,
-                          backgroundColor: item.meta.color,
-                        }}
-                      />
-                    </div>
-
-                    {/* Delta comparison */}
-                    <div className="flex items-center justify-between text-xs font-mono mt-3">
-                      <span className="text-slate-400">Physical Score:</span>
-                      <span className="font-bold text-cyan-300">{item.avgScore} / 100</span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs font-mono mt-1">
-                      <span className="text-slate-400">vs Paris 1.5°C:</span>
-                      <span className={`font-bold ${deltaPercent > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                        {deltaPercent > 0 ? `+${deltaPercent}% Loss` : 'Baseline'}
-                      </span>
-                    </div>
+                  <div className="flex items-center gap-4 text-sm tabular-nums">
+                    <span className="text-slate-400 text-xs">score {r.avgScore}</span>
+                    <span className="text-xs w-16 text-right" style={{ color: r.s === 'ssp119' ? '#94a3b8' : delta > 0 ? '#fca5a5' : '#6ee7b7' }}>
+                      {r.s === 'ssp119' ? 'baseline' : `${delta > 0 ? '+' : ''}${delta}%`}
+                    </span>
+                    <span className="text-white font-semibold w-20 text-right">{formatCurrencyUsd(r.loss)}</span>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-
-          {/* Analytical Takeaway Box */}
-          <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 flex items-start gap-3 text-xs text-slate-300">
-            <Info className="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <span className="font-bold text-white font-mono uppercase">
-                Stress Test Finding for {selectedDecade}s Horizon:
-              </span>
-              <p className="text-slate-400 leading-relaxed text-[11px]">
-                Under worst-case scenario <strong>SSP5-8.5</strong>, portfolio annual losses exceed <strong>{formatCurrencyUsd(scenarioResults[3]?.totalLoss || 0)}</strong>—a <strong>{Number((((scenarioResults[3]?.totalLoss || 1) - baseLossSsp126) / baseLossSsp126 * 100).toFixed(0))}% increase</strong> compared to the sustainable Paris-aligned <strong>SSP1-2.6</strong> pathway. Proactive adaptation Capex yields substantial IRR under higher warming pathways.
-              </p>
-            </div>
-          </div>
+                <div className="mt-2 h-2 rounded-full bg-white/[0.05] overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(r.loss / max) * 100}%`, backgroundColor: r.meta.color }} />
+                </div>
+              </div>
+            );
+          })}
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-3 border-t border-slate-800 bg-slate-950 flex items-center justify-between text-xs text-slate-400 font-mono">
-          <span>IPCC Sixth Assessment Report (AR6) Aligned</span>
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-sans font-semibold transition"
-          >
-            Close
-          </button>
-        </div>
+        <p className="text-sm text-slate-300">
+          In the {decade}s, {metricLabel.toLowerCase()} under <b>SSP5-8.5</b> is <b>{formatCurrencyUsd(worst.loss)}</b> — {uplift >= 0 ? `${uplift}% higher` : `${Math.abs(uplift)}% lower`} than the 1.5°C-aligned <b>SSP1-1.9</b> pathway ({formatCurrencyUsd(base.loss)}).
+        </p>
       </div>
-    </div>
+
+      <div className="px-6 py-3 border-t border-white/[0.06] flex justify-end">
+        <Button onClick={onClose}>Close</Button>
+      </div>
+    </ModalShell>
   );
 };
-
