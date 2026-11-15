@@ -12,6 +12,29 @@
 
 ---
 
+## 📸 Platform Interface Showcase
+
+### 1. Single Asset Location Due Diligence & 26-Hazard Screening
+*Instant sub-16ms pin drops with high-resolution Google Earth Hybrid Satellite imagery, 3-day operational weather forecast, ground elevation, slope, coastal distance, and IPCC AR6 multi-scenario projections.*
+
+![Climatrix Single Asset Location Screening](docs/images/climatrix_location_screening.png)
+
+---
+
+### 2. Multi-Billion Dollar Loan Portfolio Stress Testing
+*Portfolio-wide aggregation of Expected Annual Loss (EAL), loan-maturity horizon matching, UNEP FI transition heatmaps, and NGFS carbon shadow pricing across thousands of credit facilities.*
+
+![Climatrix Loan Portfolio Stress Testing](docs/images/climatrix_portfolio_stress_test.png)
+
+---
+
+### 3. Open Data Scientific Provenance & Engine Health
+*Transparent formula documentation, live endpoint health monitors, license compliance tracking, and zero-dependency local CMIP6 physical science fallback.*
+
+![Climatrix Methodology & Open Data Provenance](docs/images/climatrix_methodology_datasets.png)
+
+---
+
 ## 📌 Executive Summary
 
 Legacy climate risk analytics vendors charge **$50,000 to $200,000/year** for opaque, proprietary "black-box" scores that cannot be validated in bank credit committees or audited by regulatory bodies. 
@@ -38,22 +61,78 @@ Legacy climate risk analytics vendors charge **$50,000 to $200,000/year** for op
 
 ---
 
-## 🏛️ Why Institutional Teams Choose Climatrix
+## 💰 Costing, Pricing & ROI Comparison
 
-| Enterprise Criterion | Traditional Legacy Vendors (Moody's, MSCI, Jupiter) | Climatrix Platform |
-| :--- | :--- | :--- |
-| **Scientific Transparency** | Proprietary black-box algorithms; cannot be audited | **100% Transparent**: Formula-level peer-reviewed equations |
-| **Data Sovereignty & Privacy** | Loan books must be sent to vendor cloud servers | **Edge-Engine Privacy**: 100% client-side; loans never leave your browser |
-| **Pricing Model** | $50,000–$250,000/yr enterprise lock-in contracts | **Open Architecture**: $0 base cost; optional private enterprise cloud |
-| **Latency & Concurrency** | Slow batch queues (hours to days for 10k assets) | **<16ms UI latency**; instant local IndexedDB raster chunk decoding |
-| **Maturity Alignment** | Judged on 2090 climate even for a 2-year working capital loan | **Tenure-Matched**: Evaluates assets at true loan maturity horizon |
-| **Mapping Resolution** | Coarse static raster overlays | **Google Earth Hybrid Satellite (Zoom 21)** with instant pin drops |
+### Why Pay $100,000/Year for Black-Box Scores?
+
+| Platform Tier | Monthly Cost | Per-Query Cost | Features Included | Best For |
+| :--- | :--- | :--- | :--- | :--- |
+| **Climatrix Community (Active)** | **$0.00 / month** | **$0.00** | Full 26 hazards, downscaled CMIP6 baseline, Google Earth basemaps, 3-day weather, portfolio screening, CSV export | Risk analysts, credit officers, SME banks, developers |
+| **Climatrix Dedicated Cluster** | **€29 / month** (~$31) | **$0.00** (Unlimited) | Dedicated commercial Open-Meteo endpoint (`customer-*.open-meteo.com`), 0 rate limits, SLA, bulk portfolio concurrency | Institutional lenders, retail banks with >50,000 loans |
+| **Climatrix Private VPC / Docker** | **$5–$15 / month** (VPS) | **$0.00** (Unlimited) | 100% self-hosted, private cloud (AWS/GCP/Azure), air-gapped corporate network, zero external API dependencies | Tier-1 Banks, Defense, Sovereign Wealth Funds |
+| **Legacy Vendors (Moody's, MSCI, Jupiter)** | **$5,000–$15,000 / month** ($60k–$180k/yr) | **$2.50 – $10.00** / site | Proprietary black-box scores, locked formats, vendor lock-in | Legacy enterprise procurement |
+
+> **Annual Savings**: Switching from legacy vendors to Climatrix yields **>99.5% cost reduction** while providing verifiable scientific equations acceptable to banking regulators.
+
+---
+
+## 📖 How to Use Climatrix (Step-by-Step Guide)
+
+### Workflow 1: Single Asset Due Diligence & Underwriting
+1. **Locate the Asset**:
+   * Type an address, PIN code, or place name into the top search bar (e.g., *"Juhu Beach, Mumbai"* or *"25.7617, -80.1918"*).
+   * Or click anywhere directly on the interactive map: the marker drops **instantly in <16ms**.
+2. **Select Climate Horizon & Scenario**:
+   * Choose between IPCC Shared Socioeconomic Pathways:
+     * **SSP1-2.6** (Paris Agreement 1.5°C goal)
+     * **SSP2-4.5** (Middle of the road / current national pledges)
+     * **SSP3-7.0** (High emissions / regional rivalry)
+     * **SSP5-8.5** (Fossil-fueled development / worst-case stress test)
+   * Toggle projection years: **Now (2025)**, **2030**, **2040**, **2050**, **2060**, **2070**, or **2080**.
+3. **Inspect Physical Risk Metrics**:
+   * Review micro-topography: Ground Elevation (Copernicus DEM), Distance to Coast, Terrain Slope (Horn's algorithm), and Height Above Drainage (HAND).
+   * Check the **Next 3 Days Operational Weather Outlook** for immediate severe rainfall or heat warnings.
+   * Expand any of the 26 physical hazard rows to inspect return-period values (e.g. 1-in-100-year river flood depth, 1-in-100-year tropical cyclone wind speed).
+4. **Calculate Financial Loss**:
+   * Enter the loan or asset exposure amount (e.g., ₹50,000,000 or $5,000,000) and tenure (months).
+   * Select asset classification: Commercial, Industrial, Residential, Infrastructure, or Agriculture.
+   * The platform immediately outputs **Expected Annual Loss (EAL)** and 100-year loss in local currency.
+
+---
+
+### Workflow 2: Bulk Loan Book Screening & Portfolio Stress Testing
+1. **Navigate to Portfolio Tab**:
+   * Click **Portfolio** in the navigation header.
+2. **Upload Loan CSV**:
+   * Click **Upload loan file** (or drag & drop your loan file).
+   * Climatrix automatically maps standard column headers (`borrower_name`, `loan_id`, `address`, `district`, `state`, `pincode`, `lat`, `lon`, `loan_amount`, `tenure_months`, `sector`).
+3. **Automated Geocoding & Batch Evaluation**:
+   * Unlocated rows are geocoded asynchronously via OpenStreetMap Nominatim.
+   * Distinct spatial sites are computed in parallel with IndexedDB caching.
+4. **Maturity Horizon Alignment**:
+   * Toggle **"At maturity"**: scores each loan at the first decade on or after its loan maturity, ensuring short-term debt is not unfairly penalized against 2080 climate change.
+5. **Analyze Exposure & Tail Risk**:
+   * Review the **Total Exposure** card, **High/Severe Risk Amount**, and **Total Portfolio EAL**.
+   * Analyze exposure distributions by rating band, UNEP FI sector transition scores, and hazard families.
+6. **Regulatory Export**:
+   * Click **CSV** to download the complete audit-ready loan appraisal ledger with all 26 hazard scores and financial loss estimations.
+
+---
+
+### Workflow 3: Sector Transition & NGFS Carbon Price Modeling
+1. **Assign Industry Sectors**:
+   * Loans are tagged with their respective sector (e.g., Oil & Gas, Steel, Cement, Real Estate, Agriculture).
+2. **Select NGFS Scenario**:
+   * Toggle between **Net Zero 2050**, **Below 2°C**, and **Delayed Transition**.
+3. **Evaluate Carbon Shadow Liabilities**:
+   * The system interpolates the NGFS GCAM/MESSAGEix shadow carbon price ($/t $\text{CO}_2\text{e}$ and local ₹/t) at loan maturity.
+   * Displays nearby emitting industrial assets (power plants, refineries, cement mills) within 50 km using the **Climate TRACE** inventory.
 
 ---
 
 ## 🔬 Mathematical Formulations & Calculation Methodology
 
-Nothing in Climatrix is arbitrary or simulated with random numbers. Every score and financial loss output is derived from physics, extreme value theory, and engineering damage curves.
+Nothing in Climatrix is arbitrary or simulated. Every score and financial loss output is derived from physics, extreme value theory, and engineering damage curves.
 
 ---
 
@@ -191,20 +270,20 @@ Climatrix is pre-configured to generate audit-ready evidence for international b
 
 ## 📊 Scientific Data Provenance & Citations
 
-| Peril / Domain | Primary Dataset | Publishing Body | Resolution |
-| :--- | :--- | :--- | :--- |
-| **River Flooding** | GloFAS Global Flood Hazard Maps v2.1.2 | European Commission JRC | 90 m |
-| **Coastal Inundation** | Global Coastal Flood Hazard (NASADEM) | Deltares / Microsoft Planetary Computer | 90 m |
-| **Tropical Cyclones** | STORM Synthetic Track Climatology | Bloemendaal et al. / HighResMIP | 10 km |
-| **Reanalysis & Heat** | ERA5-Land Hourly Land Surface | ECMWF Copernicus Climate Service | 9 km |
-| **Climate Models** | CMIP6 Multi-Model Ensemble | IPCC Working Group I / NASA NEX-GDDP | 0.25° (~25 km) |
-| **Water Stress** | Aqueduct 4.0 Global Water Risk Atlas | World Resources Institute (WRI) | Hydro-Basin |
-| **Terrain Elevation** | Copernicus DEM GLO-30 / GLO-90 | European Space Agency (ESA) | 30 m |
-| **Subsidence** | Global InSAR Land-Subsidence Map | Davydzenka, Tahmasebi & Shokri (2024) | ~1 km |
-| **Earthquakes** | Global Earthquake Hazards Program | USGS / Global Earthquake Model (GEM) | Point catalog |
-| **Tsunamis** | Global Historical Tsunami Database | NOAA NCEI | Runup records |
-| **Lightning** | WWLLN Global Lightning Climatology | WGLC / World Wide Lightning Network | 0.5° (~50 km) |
-| **Asset Emissions** | Asset-Level Greenhouse Gas Inventory | Climate TRACE (v7 API) | Point facilities |
+| Peril / Domain | Primary Dataset | Publishing Body | Resolution | Licence |
+| :--- | :--- | :--- | :--- | :--- |
+| **River Flooding** | GloFAS Global Flood Hazard Maps v2.1.2 | European Commission JRC | 90 m | Free Open Reuse |
+| **Coastal Inundation** | Global Coastal Flood Hazard (NASADEM) | Deltares / Microsoft Planetary Computer | 90 m | CDLA-Permissive |
+| **Tropical Cyclones** | STORM Synthetic Track Climatology | Bloemendaal et al. / HighResMIP | 10 km | CC PDDC |
+| **Reanalysis & Heat** | ERA5-Land Hourly Land Surface | ECMWF Copernicus Climate Service | 9 km | Open Access |
+| **Climate Models** | CMIP6 Multi-Model Ensemble | IPCC Working Group I / NASA NEX-GDDP | 0.25° (~25 km) | Open Access |
+| **Water Stress** | Aqueduct 4.0 Global Water Risk Atlas | World Resources Institute (WRI) | Hydro-Basin | CC BY 4.0 |
+| **Terrain Elevation** | Copernicus DEM GLO-30 / GLO-90 | European Space Agency (ESA) | 30 m | Free Open Access |
+| **Subsidence** | Global InSAR Land-Subsidence Map | Davydzenka, Tahmasebi & Shokri (2024) | ~1 km | CC BY 4.0 |
+| **Earthquakes** | Global Earthquake Hazards Program | USGS / Global Earthquake Model (GEM) | Point catalog | Public Domain |
+| **Tsunamis** | Global Historical Tsunami Database | NOAA NCEI | Runup records | Public Domain |
+| **Lightning** | WWLLN Global Lightning Climatology | WGLC / World Wide Lightning Network | 0.5° (~50 km) | CC BY 4.0 |
+| **Asset Emissions** | Asset-Level Greenhouse Gas Inventory | Climate TRACE (v7 API) | Point facilities | CC BY 4.0 |
 
 ---
 
